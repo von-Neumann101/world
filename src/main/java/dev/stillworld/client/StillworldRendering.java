@@ -131,7 +131,7 @@ public final class StillworldRendering {
                 if(!(entity instanceof LivingEntity)||entity==mc.player||StillworldClient.phased(entity)
                         ||StillworldClient.locked(entity)||!entity.isAlive())continue;
                 if(event.getFrustum().isVisible(entity.getBoundingBox().inflate(.5)))
-                    draw(entity,worldPartial,worldCamera,pose,buffers,0x48FFFFFF,true);
+                    draw(entity,worldPartial,worldCamera,pose,buffers,0x28D8D8D8,true);
             }
             renderSlashes(pose,buffers,worldCamera);
             renderPhasedPlayers(pose, buffers, worldCamera, worldPartial);
@@ -178,6 +178,9 @@ public final class StillworldRendering {
                     var type = silhouette ? SilhouetteRenderType.forTexture(texture) : RenderType.entityTranslucent(texture);
                     return new TintedConsumer(buffers.getBuffer(type), tint, silhouette);
                 };
+            } else if (StillworldClient.active() && entity instanceof LivingEntity) {
+                // Shade the frozen model without replacing its texture, cutout or world lighting.
+                target = original -> new SnapshotTintConsumer(buffers.getBuffer(original));
             }
             renderer.render(entity, Mth.rotLerp(partial, entity.yRotO, entity.getYRot()), partial, pose, target,
                     tint == -1 ? dispatcher.getPackedLightCoords(entity, partial) : LightTexture.FULL_BRIGHT);
@@ -219,6 +222,16 @@ public final class StillworldRendering {
         public VertexConsumer setUv1(int u,int v) { return this; }
         public VertexConsumer setUv2(int u,int v) { return this; }
         public VertexConsumer setNormal(float x,float y,float z) { return this; }
+    }
+
+    /** Dim frozen creatures without turning their original materials into full-bright silhouettes. */
+    static record SnapshotTintConsumer(VertexConsumer delegate) implements VertexConsumer {
+        @Override public VertexConsumer addVertex(float x,float y,float z) { delegate.addVertex(x,y,z); return this; }
+        @Override public VertexConsumer setColor(int r,int g,int b,int a) { delegate.setColor(r*3/5,g*3/5,b*3/5,a); return this; }
+        @Override public VertexConsumer setUv(float u,float v) { delegate.setUv(u,v); return this; }
+        @Override public VertexConsumer setUv1(int u,int v) { delegate.setUv1(u,v); return this; }
+        @Override public VertexConsumer setUv2(int u,int v) { delegate.setUv2(u,v); return this; }
+        @Override public VertexConsumer setNormal(float x,float y,float z) { delegate.setNormal(x,y,z); return this; }
     }
 
     /** Apply tint/opacity while preserving each original layer's texture coordinates and cutout. */

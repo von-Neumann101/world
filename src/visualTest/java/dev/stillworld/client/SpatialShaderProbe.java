@@ -1,5 +1,6 @@
 package dev.stillworld.client;
 
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
@@ -55,6 +56,7 @@ public final class SpatialShaderProbe {
     private void run(Path shaders,Path output) throws Exception {
         Files.createDirectories(output);
         Files.writeString(output.resolve("result.txt"),"RUNNING: hidden shader validation\n");
+        checkSnapshotTint();
         glBindFramebuffer(GL_FRAMEBUFFER,framebuffer);
         glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,target,0);
         if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE)throw new AssertionError("Incomplete framebuffer");
@@ -72,6 +74,12 @@ public final class SpatialShaderProbe {
         check(difference(colors,render(spatial,colors,near,matrix,camera,1,1,5))<.00001,"near interaction stays aligned");
         float[] changed=render(spatial,colors,far,matrix,camera,1,1,5);
         check(difference(reference,changed)>.001,"far scene visibly deforms");
+        for(int distance:new int[]{24,40,100}) {
+            float[] displaced=render(spatial,colors,plane(matrix,distance),matrix,camera,1,1,5);
+            double pixels=meanDisplacement(colors,displaced);
+            report.append("Mean displacement at ").append(distance).append(" blocks: ").append(pixels).append(" pixels\n");
+            System.out.println("Mean displacement at "+distance+" blocks: "+pixels+" pixels");
+        }
         check(difference(changed,render(spatial,colors,far,matrix,camera,1,1,100))<.00001,"settled deformation has no time wobble");
         var bob=new Matrix4f().perspective((float)Math.toRadians(70),(float)W/H,.05f,1024).translate(.025f,-.04f,0);
         float[] bobbed=render(spatial,colors,plane(bob,100),bob,camera,1,1,5);
@@ -182,6 +190,28 @@ public final class SpatialShaderProbe {
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);return id;
     }
+    private void checkSnapshotTint() {
+        var captured=new CapturedVertex();
+        VertexConsumer tint=new StillworldRendering.SnapshotTintConsumer(captured);
+        tint.addVertex(1,2,3).setColor(200,100,50,73).setUv(.25f,.75f).setUv1(7,13).setUv2(100,200).setNormal(0,1,0);
+        check(captured.r>0 && captured.r<150 && captured.g<75 && captured.b<38
+                && captured.r==captured.g*2 && captured.g==captured.b*2,"snapshot tint lowers brightness while retaining color ratios");
+        check(captured.a==73 && captured.u==.25f && captured.v==.75f,"snapshot tint preserves alpha and texture cutout coordinates");
+        check(captured.u1==7 && captured.v1==13 && captured.u2==100 && captured.v2==200,"snapshot tint preserves overlay and world lighting");
+        check(captured.x==1 && captured.y==2 && captured.z==3 && captured.nx==0 && captured.ny==1 && captured.nz==0,"snapshot tint preserves geometry and normals");
+        tint.setColor(0,0,0,0);
+        check(captured.r==0 && captured.g==0 && captured.b==0 && captured.a==0,"snapshot tint does not lift black or fill transparent vertices");
+    }
+    private static final class CapturedVertex implements VertexConsumer {
+        private int r,g,b,a,u1,v1,u2,v2;
+        private float x,y,z,u,v,nx,ny,nz;
+        public VertexConsumer addVertex(float x,float y,float z){this.x=x;this.y=y;this.z=z;return this;}
+        public VertexConsumer setColor(int r,int g,int b,int a){this.r=r;this.g=g;this.b=b;this.a=a;return this;}
+        public VertexConsumer setUv(float u,float v){this.u=u;this.v=v;return this;}
+        public VertexConsumer setUv1(int u,int v){u1=u;v1=v;return this;}
+        public VertexConsumer setUv2(int u,int v){u2=u;v2=v;return this;}
+        public VertexConsumer setNormal(float x,float y,float z){nx=x;ny=y;nz=z;return this;}
+    }
     private static void upload(int texture,int format,float[] data){glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,texture);glTexSubImage2D(GL_TEXTURE_2D,0,0,0,W,H,format,GL_FLOAT,data);}
     private static int program(Path path) throws Exception {
         int vertex=shader(GL_VERTEX_SHADER,VERTEX),fragment=shader(GL_FRAGMENT_SHADER,Files.readString(path));
@@ -194,6 +224,7 @@ public final class SpatialShaderProbe {
     private void check(boolean ok,String label){if(!ok)throw new AssertionError(label);checks++;report.append("PASS ").append(label).append('\n');}
     private static double difference(float[] a,float[] b){double sum=0;for(int i=0;i<a.length;i++)sum+=Math.abs(a[i]-b[i]);return sum/a.length;}
     private static double maxDifference(float[] a,float[] b){double max=0;for(int i=0;i<a.length;i++)max=Math.max(max,Math.abs(a[i]-b[i]));return max;}
+    private static double meanDisplacement(float[] a,float[] b){double sum=0;for(int i=0;i<a.length;i+=4)sum+=Math.hypot((a[i]-b[i])*W/.7,(a[i+1]-b[i+1])*H/.7);return sum/(W*H);}
     private static boolean allFinite(float[] a){for(float v:a)if(!Float.isFinite(v)||v<0||v>1)return false;return true;}
     private static double regionDifference(float[] a,float[] b,int x0,int y0,int x1,int y1){double max=0;for(int y=y0;y<y1;y++)for(int x=x0;x<x1;x++)for(int c=0;c<4;c++)max=Math.max(max,Math.abs(a[(y*W+x)*4+c]-b[(y*W+x)*4+c]));return max;}
     private static double borderDifference(float[] a,float[] b){return Math.max(Math.max(regionDifference(a,b,0,0,W,2),regionDifference(a,b,0,H-2,W,H)),Math.max(regionDifference(a,b,0,0,2,H),regionDifference(a,b,W-2,0,W,H)));}

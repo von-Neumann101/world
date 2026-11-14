@@ -21,7 +21,7 @@ float distantWeight(vec2 uv) {
     float depth = texture(DepthSampler, uv).r;
     if (depth >= 0.999999) return 1.0;
     // Leave interaction and nearby silhouettes in their actual screen positions.
-    return smoothstep(12.0, 72.0, length(relativePosition(uv, depth)));
+    return smoothstep(12.0, 48.0, length(relativePosition(uv, depth)));
 }
 
 void main() {
@@ -43,7 +43,7 @@ void main() {
     vec3 opticalOrigin = eye.xyz / eye.w;
     vec3 shell = opticalOrigin + ray * 96.0;
     vec3 world = shell + CameraFromOrigin;
-    vec3 bend = vec3(
+    vec3 bend = 2.2 * vec3(
         5.0 * sin(world.z * 0.014) + 3.0 * sin(world.y * 0.018),
         4.5 * sin(world.x * 0.012 + 0.7) + 3.0 * sin(world.z * 0.009),
         4.0 * sin(world.x * 0.013) - 2.0 * sin(world.y * 0.016)
@@ -51,17 +51,20 @@ void main() {
     vec4 projected = ViewProjection * vec4(shell - bend, 1.0);
     vec2 refracted = projected.xy / projected.w * 0.5 + 0.5;
     vec2 delta = refracted - texCoord;
-    delta *= min(1.0, 0.035 / max(length(delta), 0.00001));
+    delta *= min(1.0, 0.075 / max(length(delta), 0.00001));
 
     // Fade at the border instead of stretching clamped edge pixels into missing geometry.
     vec2 border = min(texCoord, 1.0 - texCoord);
     float frame = smoothstep(0.008, 0.10, min(border.x, border.y));
     float amount = coverage * clamp(DistortionStrength, 0.0, 1.0) * frame;
-    delta *= amount * distantWeight(texCoord);
+    delta *= amount;
+    float protection = distantWeight(texCoord);
     vec2 halfPixel = 0.5 / InSize;
-    vec2 candidate = clamp(texCoord + delta, halfPixel, 1.0 - halfPixel);
+    vec2 candidate = clamp(texCoord + delta * protection, halfPixel, 1.0 - halfPixel);
     // Protect foreground sampled along the refraction path, not just at its destination.
-    float protection = min(distantWeight(candidate), distantWeight(mix(texCoord, candidate, 0.5)));
+    // Combine depth weights with min: multiplying them suppresses the midrange twice.
+    protection = min(protection, distantWeight(candidate));
+    protection = min(protection, distantWeight(mix(texCoord, candidate, 0.5)));
     protection = min(protection, distantWeight(mix(texCoord, candidate, 0.25)));
     protection = min(protection, distantWeight(mix(texCoord, candidate, 0.75)));
     vec2 source = clamp(texCoord + delta * protection, halfPixel, 1.0 - halfPixel);

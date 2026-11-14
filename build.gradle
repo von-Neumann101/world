@@ -101,7 +101,7 @@ tasks.register('spatialShaderTest', JavaExec) {
     systemProperty 'java.awt.headless', 'true'
     systemProperty 'stillworld.automatedClient', 'true'
     args project.file('src/main/resources/assets/stillworld/shaders/program').absolutePath,
-         project.file('docs/verification/spatial-reflection').absolutePath
+         project.file("docs/verification/spatial-reflection-${project.version}").absolutePath
 }
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
 tasks.named('jar') { manifest.attributes('Implementation-Version': project.version) }
