@@ -13,7 +13,7 @@ import org.joml.Vector4f;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/** Runs the shipped GLSL on dark/light surfaces to check atmospheric depth and sky headroom. */
+/** Runs the shipped GLSL to check darker atmospheric depth and preservation of original sky color. */
 final class DistanceShaderProbe {
     static void check(Path output) throws Exception {
         var mc=Minecraft.getInstance();
@@ -22,6 +22,7 @@ final class DistanceShaderProbe {
         float[] tones={.08f,.8f};
         double[][] brightness=new double[tones.length][distances.length];
         double[] sky=new double[3];
+        int blueSky;
         double rim;
         var projection=new Matrix4f().perspective((float)Math.toRadians(70),1,.05f,2048);
         try(var chain=new PostChain(mc.getTextureManager(),mc.getResourceManager(),target,Stillworld.id("shaders/post/monochrome.json"))) {
@@ -35,9 +36,10 @@ final class DistanceShaderProbe {
                 var point=projection.transform(new Vector4f(0,0,-distances[i],1));
                 brightness[tone][i]=sample(target,chain,tones[tone],point.z/point.w*.5+.5);
             }
-            sky[0]=sample(target,chain,0,1);sky[1]=sample(target,chain,1,1);
+            sky[0]=sample(target,chain,.2f,1);sky[1]=sample(target,chain,.8f,1);
             // Empty lower sky can retain framebuffer alpha zero; the completed scene must still be visible.
-            sky[2]=sample(target,chain,0,1,0);
+            sky[2]=sample(target,chain,.2f,1,0);
+            blueSky=sampleColor(target,chain,.2f,.45f,.85f,1,1);
             target.setClearColor(.2f,.2f,.2f,1);target.clear(Minecraft.ON_OSX);target.bindWrite(true);
             var near=projection.transform(new Vector4f(0,0,-4,1));
             RenderSystem.enableScissor(0,0,32,64);
@@ -56,7 +58,8 @@ final class DistanceShaderProbe {
         Files.writeString(output.resolve("distance-shader-probe.txt"),"distances="+java.util.Arrays.toString(distances)
                 +"\ndark="+java.util.Arrays.toString(brightness[0])+"\nlight="+java.util.Arrays.toString(brightness[1])+"\nsky="+java.util.Arrays.toString(sky)+"\nrim="+rim+"\n");
         double nearContrast=brightness[1][0]-brightness[0][0];
-        if(nearContrast<.30)throw new AssertionError("Near textures lost their light/shadow contrast");
+        if(nearContrast<.28)throw new AssertionError("Near textures lost their light/shadow contrast");
+        if(brightness[1][0]>.51)throw new AssertionError("World surfaces were not darkened from the previous silver-gray treatment");
         for(int i=1;i<distances.length;i++) {
             double contrast=brightness[1][i]-brightness[0][i];
             double previous=brightness[1][i-1]-brightness[0][i-1];
@@ -64,11 +67,13 @@ final class DistanceShaderProbe {
             if(contrast>=previous-.01)throw new AssertionError("Atmospheric contrast did not decrease with distance");
             if(contrast<nearContrast*.18)throw new AssertionError("Distant layers lost all light/shadow separation");
         }
-        if(brightness[0][4]<.42||brightness[1][5]>.78)throw new AssertionError("Distant tones became oppressive black or featureless white");
+        if(brightness[0][4]<.36||brightness[1][5]>.66)throw new AssertionError("Distant tones became oppressive black or featureless white");
         if(brightness[1][4]-brightness[0][4]>nearContrast*.6)throw new AssertionError("Distant textures remained too high-contrast");
-        if(sky[0]<.55||sky[1]>.88||sky[1]-sky[0]<.04)throw new AssertionError("Sky needs a pale atmosphere with visible cloud layering");
+        if(Math.abs(sky[0]-.2)>.01||Math.abs(sky[1]-.8)>.01)throw new AssertionError("Sky luminance no longer matches the original world");
+        if(Math.abs((blueSky&255)-51)>2||Math.abs(((blueSky>>8)&255)-115)>2||Math.abs(((blueSky>>16)&255)-217)>2)
+            throw new AssertionError("Original blue sky was desaturated or dimmed by world post-processing");
         if(Math.abs(sky[2]-sky[0])>.01)throw new AssertionError("Transparent lower sky became a black horizon in the final composite");
-        if(rim<.06||rim>.24)throw new AssertionError("Structural rim must be present but secondary to the surface: "+rim);
+        if(rim<.045||rim>.24)throw new AssertionError("Structural rim must be present but secondary to the surface: "+rim);
     }
 
     private static double sample(TextureTarget target,PostChain chain,float tone,double depth) {
@@ -76,12 +81,16 @@ final class DistanceShaderProbe {
     }
 
     private static double sample(TextureTarget target,PostChain chain,float tone,double depth,float alpha) {
-        target.setClearColor(tone,tone,tone,alpha);target.clear(Minecraft.ON_OSX);target.bindWrite(true);
+        return brightness(sampleColor(target,chain,tone,tone,tone,depth,alpha));
+    }
+
+    private static int sampleColor(TextureTarget target,PostChain chain,float red,float green,float blue,double depth,float alpha) {
+        target.setClearColor(red,green,blue,alpha);target.clear(Minecraft.ON_OSX);target.bindWrite(true);
         GlStateManager._clearDepth(depth);
         GlStateManager._clear(org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT,Minecraft.ON_OSX);
         RenderSystem.disableDepthTest();RenderSystem.disableBlend();chain.process(0);
         try(var image=Screenshot.takeScreenshot(target)) {
-            return brightness(image.getPixelRGBA(32,32));
+            return image.getPixelRGBA(32,32);
         }
     }
 

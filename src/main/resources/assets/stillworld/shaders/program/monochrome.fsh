@@ -45,10 +45,6 @@ void main() {
     float opticalDistance = log(1.0 + max(distanceFromEye - 8.0, 0.0) / 24.0);
     float haze = 0.83 * (1.0 - exp(-0.60 * opticalDistance));
     float atmosphere = 0.66;
-    if (sky) {
-        surface = atmosphere + 0.10 * luminance;
-        haze = 0.0;
-    }
 
     float edge = texture(EdgeSampler, texCoord).r;
     // Thin isolated structure gets a quiet rim. Repeated cutout holes (leaves/grass) remain texture,
@@ -72,7 +68,9 @@ void main() {
     // Contours briefly catch the entry wave, then settle back into the surface rather than dominating it.
     float rim = edge * (0.30 + front * 0.38);
     float linework = mix(mix(surface, 0.86, rim), atmosphere, haze);
-    vec3 result = mix(color.rgb, vec3(linework), coverage);
+    // Keep the sky (including the skybox plates) in its original colors; dim only the frozen world.
+    vec3 treatment = sky ? color.rgb : vec3(linework * 0.84);
+    vec3 result = mix(color.rgb, treatment, coverage);
     // Narrow silver-white core and restrained halo follow world distance, not a screen-space circle.
     result = mix(result, vec3(0.9, 0.94, 0.98), front * 0.65);
     // This is the completed world image. Empty sky may have alpha zero in the source framebuffer;

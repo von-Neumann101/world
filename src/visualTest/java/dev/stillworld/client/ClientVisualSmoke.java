@@ -57,7 +57,7 @@ import java.util.function.Consumer;
 /** Exclusive development source set; no world-writing test code is shipped in the main jar. */
 @Mod(value = Stillworld.ID, dist = Dist.CLIENT)
 public final class ClientVisualSmoke {
-    private enum Step { WORLD, SETUP, BASELINE, ENTER, FROZEN, BE_RELOAD, VISION_RESIZE, VISION_RELOAD, VISION_FABULOUS, MARK, ATTACK, SLASH, MINE_AIM, MINING, PLACE_AIM, PLACING, DEAD, EXIT, RESTORED }
+    private enum Step { WORLD, SETUP, BASELINE, ENTER, FROZEN, BE_RELOAD, VISION_RESIZE, SKY_SEA, SKY_HIDDEN, VISION_RELOAD, VISION_FABULOUS, MARK, ATTACK, SLASH, MINE_AIM, MINING, PLACE_AIM, PLACING, DEAD, EXIT, RESTORED }
     private static final Vec3 ENTRY = new Vec3(.5,100,.5), COW = new Vec3(.5,100,2.9);
     private static final BlockPos MINE = new BlockPos(1,100,2), SUPPORT = new BlockPos(-1,99,2), REAL_CHANGE = new BlockPos(3,100,2);
     private static final BlockPos CHEST=new BlockPos(-3,100,2), ENDER=new BlockPos(-4,100,3), SHULKER=new BlockPos(2,100,5), BOOK=new BlockPos(-3,100,5), BELL=new BlockPos(3,100,5);
@@ -79,6 +79,7 @@ public final class ClientVisualSmoke {
     private int originalWidth,originalHeight;
     private java.util.concurrent.CompletableFuture<Void> reload;
     private net.minecraft.client.GraphicsStatus originalGraphics;
+    private boolean[] skyTiles;
 
     public ClientVisualSmoke(IEventBus bus) {
         if (Boolean.getBoolean("stillworld.visualTest.auto")) {
@@ -135,7 +136,7 @@ public final class ClientVisualSmoke {
                     if(!StillworldClient.active()||ghost==null||age<65)return;
                     require(StillworldPostEffect.settled(),"World linework shader did not finish its entry wave");
                     DistanceShaderProbe.check(output);
-                    checks.add("Actual shader retained near texture contrast, lifted distant shadows into silver haze at 4/16/40/88/184/512 blocks, and preserved pale sky layering");
+                    checks.add("Actual shader darkened world surfaces while retaining atmospheric depth, original sky RGB and an opaque final sky composite");
                     ghostTick=ghost.tickCount;liveTick=live(cowId).tickCount;frozenTime=mc.level.getGameTime();frozenModel=ClientPose.capture(ghost);
                     for(var entry:originalBlockEntities.entrySet())require(mc.level.getBlockEntity(entry.getKey())!=entry.getValue(),"Entry did not exercise chunk replacement for "+entry.getKey());
                     blockEntityPose=readBlockEntityPose();
@@ -195,7 +196,24 @@ public final class ClientVisualSmoke {
                     require(StillworldPostEffect.settled(),"Resize lost the settled world effect");
                     checkFoliage();
                     shot("08-linework-resized.png");
-                    reload=mc.reloadResourcePacks();advance(Step.VISION_RELOAD);
+                    aim(ENTRY.add(0,64,48));advance(Step.SKY_SEA);
+                }
+                case SKY_SEA -> {
+                    if(!sent&&age>=15){checkSkySea(false);shot("11-sky-sea.png");sent=true;}
+                    if(!sent||age<55)return;
+                    checkSkySea(true);shot("12-sky-sea-wave.png");
+                    require(mc.level.getGameTime()==frozenTime,"Sky animation advanced the frozen world clock");
+                    checks.add("Sky retained original blue gaps between neutral plates; the sea continued undulating while the snapshot world clock stayed frozen");
+                    mc.player.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.BLINDNESS,200));
+                    advance(Step.SKY_HIDDEN);
+                }
+                case SKY_HIDDEN -> {
+                    if(age<15)return;
+                    require(mc.player.hasEffect(net.minecraft.world.effect.MobEffects.BLINDNESS),"Native sky suppression was not exercised");
+                    checkHiddenSky();shot("13-sky-hidden-by-blindness.png");
+                    mc.player.removeEffect(net.minecraft.world.effect.MobEffects.BLINDNESS);
+                    checks.add("Native blindness suppressed sky plates instead of exposing their shapes through the hidden sky");
+                    aim(new Vec3(8,102,10));reload=mc.reloadResourcePacks();advance(Step.VISION_RELOAD);
                 }
                 case VISION_RELOAD -> {
                     if(reload==null||!reload.isDone()||mc.getOverlay()!=null||age<45||!StillworldPostEffect.settled())return;
@@ -415,6 +433,40 @@ public final class ClientVisualSmoke {
                     org.lwjgl.opengl.GL11.GL_DEPTH_COMPONENT,org.lwjgl.opengl.GL11.GL_FLOAT,depth);
         } finally {org.lwjgl.opengl.GL30.glBindFramebuffer(org.lwjgl.opengl.GL30.GL_READ_FRAMEBUFFER,previous);}
         return depth;
+    }
+    private void checkSkySea(boolean moving) throws Exception {
+        try(var image=Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
+            boolean[] tiles=new boolean[image.getWidth()*image.getHeight()];
+            int blue=0,plates=0,count=0,changed=0;
+            for(int y=image.getHeight()/10;y<image.getHeight()*3/4;y++)for(int x=image.getWidth()/10;x<image.getWidth()*9/10;x++) {
+                int c=image.getPixelRGBA(x,y),r=c&255,g=(c>>8)&255,b=(c>>16)&255;
+                int i=y*image.getWidth()+x;
+                tiles[i]=Math.max(r,Math.max(g,b))-Math.min(r,Math.min(g,b))<20&&(r+g+b)/3<153;
+                if(tiles[i])plates++;if(b>r+30&&b>g+10)blue++;count++;
+                if(moving&&tiles[i]!=skyTiles[i])changed++;
+            }
+            Files.writeString(output.resolve(moving?"sky-sea-moving.txt":"sky-sea-start.txt"),
+                    "plates="+(double)plates/count+" blue="+(double)blue/count+" waveCoverageChange="+(double)changed/count+"\n");
+            require((double)blue/count>.08,"Original sky color is not visible between the plates");
+            require((double)plates/count>.10&&(double)plates/count<.8,"Sky lacks a separated sea of neutral plates");
+            if(moving)require((double)changed/count>.008&&(double)changed/count<.35,"Sky plates did not undergo a restrained visible wave motion");
+            skyTiles=tiles;
+        }
+    }
+    private void checkHiddenSky() throws Exception {
+        try(var image=Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
+            float[] depth=readSceneDepth(image.getWidth(),image.getHeight());
+            double min=1,max=0;
+            int count=0;
+            for(int y=image.getHeight()*15/100;y<image.getHeight()*40/100;y++)for(int x=image.getWidth()*20/100;x<image.getWidth()*70/100;x++) {
+                // Vanilla clouds are separate world geometry; this check isolates the hidden skybox.
+                if(depth[(image.getHeight()-1-y)*image.getWidth()+x]<.999999f)continue;
+                int c=image.getPixelRGBA(x,y);double light=((c&255)+((c>>8)&255)+((c>>16)&255))/765.0;
+                min=Math.min(min,light);max=Math.max(max,light);count++;
+            }
+            require(count>image.getWidth()*image.getHeight()*.02,"Hidden-sky check did not sample enough sky pixels");
+            require(max-min<.025,"Sky plates remained visible through native blindness: brightness span="+(max-min));
+        }
     }
     private static void require(boolean condition,String message){if(!condition)throw new AssertionError(message);}
     private void finish(Throwable failure){
