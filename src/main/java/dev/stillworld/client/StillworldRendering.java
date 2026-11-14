@@ -64,7 +64,7 @@ public final class StillworldRendering {
             worldPartial = event.getPartialTick().getGameTimeDeltaPartialTick(false);
             StillworldPostEffect.render(event);
             afterPostEffect(event);
-            ConnectionRenderer.render(event);
+            StillworldPostEffect.renderSpatial();
             return;
         }
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_ENTITIES) return;
@@ -125,36 +125,23 @@ public final class StillworldRendering {
         RenderSystem.enableDepthTest(); RenderSystem.depthMask(true);
         mc.gameRenderer.lightTexture().turnOnLightLayer();
         try {
-            drawEffects(event.getCamera(),event.getFrustum(),worldPartial,mc.renderBuffers().bufferSource());
+            var buffers = mc.renderBuffers().bufferSource();
+            var pose=new PoseStack();
+            if(StillworldClient.seeLive())for(var entity:mc.level.entitiesForRendering()) {
+                if(!(entity instanceof LivingEntity)||entity==mc.player||StillworldClient.phased(entity)
+                        ||StillworldClient.locked(entity)||!entity.isAlive())continue;
+                if(event.getFrustum().isVisible(entity.getBoundingBox().inflate(.5)))
+                    draw(entity,worldPartial,worldCamera,pose,buffers,0x28D8D8D8,true);
+            }
+            renderSlashes(pose,buffers,worldCamera);
+            renderPhasedPlayers(pose, buffers, worldCamera, worldPartial);
+            buffers.endBatch();
+            SkillParticles.renderEffects(event);
         } finally {
             mc.gameRenderer.lightTexture().turnOffLightLayer();
             stack.popMatrix(); RenderSystem.applyModelViewMatrix();
             RenderSystem.setProjectionMatrix(projection, VertexSorting.DISTANCE_TO_ORIGIN);
         }
-    }
-
-    static void drawFrozen(net.minecraft.client.Camera camera,net.minecraft.client.renderer.culling.Frustum frustum,MultiBufferSource buffers) {
-        var pose=new PoseStack();
-        for(var ghost:StillworldClient.ghosts().values()) {
-            if(StillworldClient.isDead(ghost.getUUID()) || StillworldClient.phased(ghost))continue;
-            if(frustum.isVisible(ghost.getBoundingBox().inflate(.5)))draw(ghost,1,camera.getPosition(),pose,buffers,-1,false);
-        }
-    }
-
-    static void drawEffects(net.minecraft.client.Camera camera,net.minecraft.client.renderer.culling.Frustum frustum,float partial,MultiBufferSource.BufferSource buffers) {
-        var mc=Minecraft.getInstance();
-        var position=camera.getPosition();
-        var pose=new PoseStack();
-        if(StillworldClient.seeLive())for(var entity:mc.level.entitiesForRendering()) {
-            if(!(entity instanceof LivingEntity)||entity==mc.player||StillworldClient.phased(entity)
-                    ||StillworldClient.locked(entity)||!entity.isAlive())continue;
-            if(frustum.isVisible(entity.getBoundingBox().inflate(.5)))
-                draw(entity,partial,position,pose,buffers,0x28D8D8D8,true);
-        }
-        renderSlashes(pose,buffers,position);
-        renderPhasedPlayers(pose, buffers, position, partial);
-        buffers.endBatch();
-        SkillParticles.renderEffects(camera,frustum,partial);
     }
 
     public static void clear() {

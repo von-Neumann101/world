@@ -72,7 +72,6 @@ public final class StillworldClient {
         modBus.addListener(StillworldClient::keys);
         modBus.addListener(StillworldClient::setup);
         modBus.addListener(SilhouetteRenderType::registerShaders);
-        modBus.addListener(ConnectionRenderer::registerShaders);
         modBus.addListener(StillworldPostEffect::registerReloads);
         NeoForge.EVENT_BUS.addListener(StillworldClient::tick);
         NeoForge.EVENT_BUS.addListener(StillworldClient::interaction);

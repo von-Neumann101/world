@@ -5,6 +5,7 @@ import net.minecraft.core.particles.ParticleOptions;
 import java.util.Collections;
 import java.util.Set;
 import java.util.WeakHashMap;
+import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 /** Skill effects keep animating while pre-entry environmental particles remain frozen. */
 public final class SkillParticles {
     private static final Set<Particle> OWNED = Collections.newSetFromMap(new WeakHashMap<>());
@@ -13,9 +14,10 @@ public final class SkillParticles {
     public static boolean visible(Particle particle) {
         return !StillworldClient.active() || OWNED.contains(particle)==effectsPass;
     }
-    static void renderEffects(net.minecraft.client.Camera camera,net.minecraft.client.renderer.culling.Frustum frustum,float partial) {
+    static void renderEffects(RenderLevelStageEvent event) {
         var mc=Minecraft.getInstance();effectsPass=true;
-        try { mc.particleEngine.render(mc.gameRenderer.lightTexture(),camera,partial,frustum,type->true); }
+        try { mc.particleEngine.render(mc.gameRenderer.lightTexture(),event.getCamera(),
+                event.getPartialTick().getGameTimeDeltaPartialTick(false),event.getFrustum(),type->true); }
         finally { effectsPass=false; }
     }
     public static boolean accept(Particle particle) {

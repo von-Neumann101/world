@@ -42,7 +42,7 @@ neoForge {
             programArgument '--quickPlaySingleplayer'
             programArgument 'StillworldSmoke'
             systemProperty 'stillworld.visualTest.auto', 'true'
-            systemProperty 'stillworld.visualTest.output', project.file(providers.gradleProperty('visualEvidence').orElse("docs/verification/connection-client-${project.mod_version}").get()).absolutePath
+            systemProperty 'stillworld.visualTest.output', project.file(providers.gradleProperty('visualEvidence').orElse("docs/verification/visual-client-${project.mod_version}").get()).absolutePath
         }
         multiplayerHost {
             client()
@@ -97,12 +97,12 @@ tasks.register('spatialShaderTest', JavaExec) {
     group = 'verification'
     dependsOn 'visualTestClasses'
     classpath = sourceSets.visualTest.runtimeClasspath
-    mainClass = 'dev.stillworld.client.ConnectionShaderProbe'
+    mainClass = 'dev.stillworld.client.SpatialShaderProbe'
     javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
     systemProperty 'java.awt.headless', 'true'
     systemProperty 'stillworld.automatedClient', 'true'
-    args project.file('src/main/resources/assets/stillworld/shaders/core').absolutePath,
-         project.file("docs/verification/impossible-connections-${project.version}").absolutePath,
+    args project.file('src/main/resources/assets/stillworld/shaders/program').absolutePath,
+         project.file("docs/verification/spatial-reflection-${project.version}").absolutePath,
          providers.gradleProperty('probeWidth').orElse('640').get(),
          providers.gradleProperty('probeHeight').orElse('360').get()
 }

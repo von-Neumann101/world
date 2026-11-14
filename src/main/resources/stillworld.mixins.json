@@ -19,8 +19,6 @@
     "PhasePlayerTouchMixin"
   ],
   "client": [
-    "client.ConnectionLevelAccessor",
-    "client.ConnectionSectionAccessor",
     "client.AutomatedTestMouseMixin",
     "client.AutomatedTestWindowMixin",
     "client.WalkAnimationAccessor",
