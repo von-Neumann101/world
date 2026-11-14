@@ -28,6 +28,7 @@
     "client.LevelRendererMixin",
     "client.TextureAtlasMixin",
     "client.GameRendererMixin",
+    "client.PostChainAccessor",
     "client.ParticleEngineMixin",
     "client.ParticleRenderMixin",
     "client.CompositeRenderTypeAccessor",

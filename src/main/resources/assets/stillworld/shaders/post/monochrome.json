@@ -1,7 +1,10 @@
 {
-  "targets": ["stillworld_swap"],
+  "targets": ["stillworld_swap", "stillworld_edges"],
   "passes": [
-    {"name": "stillworld:monochrome", "intarget": "minecraft:main", "outtarget": "stillworld_swap"},
+    {"name": "stillworld:contours", "intarget": "minecraft:main", "outtarget": "stillworld_edges",
+      "auxtargets": [{"name":"DepthSampler","id":"minecraft:main:depth"}]},
+    {"name": "stillworld:monochrome", "intarget": "minecraft:main", "outtarget": "stillworld_swap",
+      "auxtargets": [{"name":"DepthSampler","id":"minecraft:main:depth"}, {"name":"EdgeSampler","id":"stillworld_edges"}]},
     {"name": "blit", "intarget": "stillworld_swap", "outtarget": "minecraft:main"}
   ]
 }

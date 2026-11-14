@@ -57,7 +57,7 @@ import java.util.function.Consumer;
 /** Exclusive development source set; no world-writing test code is shipped in the main jar. */
 @Mod(value = Stillworld.ID, dist = Dist.CLIENT)
 public final class ClientVisualSmoke {
-    private enum Step { WORLD, SETUP, BASELINE, ENTER, FROZEN, BE_RELOAD, MARK, ATTACK, SLASH, MINE_AIM, MINING, PLACE_AIM, PLACING, DEAD, EXIT, RESTORED }
+    private enum Step { WORLD, SETUP, BASELINE, ENTER, FROZEN, BE_RELOAD, VISION_RESIZE, VISION_RELOAD, VISION_FABULOUS, MARK, ATTACK, SLASH, MINE_AIM, MINING, PLACE_AIM, PLACING, DEAD, EXIT, RESTORED }
     private static final Vec3 ENTRY = new Vec3(.5,100,.5), COW = new Vec3(.5,100,2.9);
     private static final BlockPos MINE = new BlockPos(1,100,2), SUPPORT = new BlockPos(-1,99,2), REAL_CHANGE = new BlockPos(3,100,2);
     private static final BlockPos CHEST=new BlockPos(-3,100,2), ENDER=new BlockPos(-4,100,3), SHULKER=new BlockPos(2,100,5), BOOK=new BlockPos(-3,100,5), BELL=new BlockPos(3,100,5);
@@ -76,6 +76,9 @@ public final class ClientVisualSmoke {
     private CompoundTag frozenModel;
     private long frozenTime;
     private int ghostTick, liveTick;
+    private int originalWidth,originalHeight;
+    private java.util.concurrent.CompletableFuture<Void> reload;
+    private net.minecraft.client.GraphicsStatus originalGraphics;
 
     public ClientVisualSmoke(IEventBus bus) {
         if (Boolean.getBoolean("stillworld.visualTest.auto")) {
@@ -108,6 +111,7 @@ public final class ClientVisualSmoke {
                 require(expected.equals(actual), "Refused to modify a world outside the dedicated StillworldSmoke folder: "+actual);
                 Files.createDirectories(output); Files.writeString(output.resolve("result.txt"), "RUNNING\n");
                 mc.options.hideGui = false; mc.options.fov().set(70); mc.options.guiScale().set(2);
+                originalGraphics=mc.options.graphicsMode().get();mc.options.graphicsMode().set(net.minecraft.client.GraphicsStatus.FANCY);
                 onServer(this::prepare); advance(Step.SETUP); return;
             }
             if (mc.player == null || mc.level == null) return;
@@ -127,8 +131,9 @@ public final class ClientVisualSmoke {
                 }
                 case ENTER -> {
                     var ghost=StillworldClient.ghosts().get(cowId);
-                    if(!StillworldClient.active()||ghost==null||age<20)return;
-                    require(mc.gameRenderer.currentEffect()!=null && mc.gameRenderer.currentEffect().getName().equals("stillworld:shaders/post/monochrome.json"),"Monochrome post-processing is not loaded");
+                    if(StillworldClient.active() && (age==4||age==9||age==16||age==28))shot("scan-"+age+".png");
+                    if(!StillworldClient.active()||ghost==null||age<65)return;
+                    require(StillworldPostEffect.settled(),"World linework shader did not finish its entry wave");
                     ghostTick=ghost.tickCount;liveTick=live(cowId).tickCount;frozenTime=mc.level.getGameTime();frozenModel=ClientPose.capture(ghost);
                     for(var entry:originalBlockEntities.entrySet())require(mc.level.getBlockEntity(entry.getKey())!=entry.getValue(),"Entry did not exercise chunk replacement for "+entry.getKey());
                     blockEntityPose=readBlockEntityPose();
@@ -148,6 +153,7 @@ public final class ClientVisualSmoke {
                 }
                 case FROZEN -> {
                     if(age<65||!serverDone)return;
+                    checkLinework();
                     var ghost=StillworldClient.ghosts().get(cowId);var real=live(cowId);
                     require(ghost.tickCount==ghostTick && frozenModel.equals(ClientPose.capture(ghost)),"Frozen vanilla model or animation time advanced");
                     require(real!=null && real.tickCount>liveTick+20,"Real client entity updates stopped while the frozen clone was displayed");
@@ -176,7 +182,37 @@ public final class ClientVisualSmoke {
                     if(!sent&&age>=15){require(blockEntityPose.equals(readBlockEntityPose()),"Unloading/reloading a saved chunk replaced frozen BE progress with defaults");aim(new Vec3(-2.5,100.8,3.5));sent=true;}
                     if(!sent||age<30)return;
                     shot("07-frozen-block-entities.png");checks.add("Chest/ender/shulker/book/bell progress survived initial chunk replacement, stayed frozen, and survived actual chunk unload/reload");
-                    aim(StillworldClient.ghosts().get(cowId).getBoundingBox().getCenter());advance(Step.MARK);
+                    aim(new Vec3(8,102,10));
+                    originalWidth=mc.getWindow().getWidth();originalHeight=mc.getWindow().getHeight();
+                    org.lwjgl.glfw.GLFW.glfwSetWindowSize(mc.getWindow().getWindow(),1024,576);
+                    advance(Step.VISION_RESIZE);
+                }
+                case VISION_RESIZE -> {
+                    if(age<15)return;
+                    require(mc.getMainRenderTarget().width==1024&&mc.getMainRenderTarget().height==576,"Client window did not really resize");
+                    require(StillworldPostEffect.settled(),"Resize lost the settled world effect");
+                    checkFoliage();
+                    shot("08-linework-resized.png");
+                    reload=mc.reloadResourcePacks();advance(Step.VISION_RELOAD);
+                }
+                case VISION_RELOAD -> {
+                    if(reload==null||!reload.isDone()||mc.getOverlay()!=null||age<45||!StillworldPostEffect.settled())return;
+                    reload.join();
+                    shot("09-linework-resource-reload.png");
+                    require(frozenModel.equals(ClientPose.capture(StillworldClient.ghosts().get(cowId))),"Resource reload changed the frozen entity pose");
+                    org.lwjgl.glfw.GLFW.glfwSetWindowSize(mc.getWindow().getWindow(),originalWidth,originalHeight);
+                    checks.add("Actual window resize and resource reload rebuilt linework and retained the settled state/frozen model");
+                    aim(StillworldClient.ghosts().get(cowId).getBoundingBox().getCenter());
+                    mc.options.graphicsMode().set(net.minecraft.client.GraphicsStatus.FABULOUS);mc.levelRenderer.allChanged();
+                    advance(Step.VISION_FABULOUS);
+                }
+                case VISION_FABULOUS -> {
+                    if(age<50)return;
+                    require(Minecraft.useShaderTransparency(),"Fabulous transparency was not actually enabled");
+                    checkLinework();shot("10-linework-fabulous.png");
+                    checks.add("Fabulous transparency composition retained scene depth and sparse structural contours");
+                    mc.options.graphicsMode().set(net.minecraft.client.GraphicsStatus.FANCY);mc.levelRenderer.allChanged();
+                    advance(Step.MARK);
                 }
                 case MARK -> {
                     if(!sent && age>=5){
@@ -232,7 +268,7 @@ public final class ClientVisualSmoke {
                 case EXIT -> {
                     if(StillworldClient.active()||age<30)return;
                     require(StillworldClient.ghosts().isEmpty(),"Exit retained snapshot entities");
-                    require(mc.gameRenderer.currentEffect()==null||!mc.gameRenderer.currentEffect().getName().equals("stillworld:shaders/post/monochrome.json"),"Exit retained the monochrome effect");
+                    require(!StillworldPostEffect.loaded(),"Exit retained the world linework effect");
                     require(mc.level.getBlockState(MINE).isAir(),"Permanent mining was restored on exit");
                     require(mc.level.getBlockState(SUPPORT.above()).isAir(),"Temporary placement remained after exit");
                     require(mc.level.getBlockState(REAL_CHANGE).is(Blocks.DIAMOND_BLOCK),"Exit did not restore current real terrain");
@@ -256,6 +292,17 @@ public final class ClientVisualSmoke {
             for(int y=100;y<=106;y++)level.setBlockAndUpdate(new BlockPos(x,y,z),Blocks.AIR.defaultBlockState());
         }
         for(int y=100;y<=103;y++){level.setBlockAndUpdate(new BlockPos(-4,y,6),Blocks.LIME_WOOL.defaultBlockState());level.setBlockAndUpdate(new BlockPos(4,y,6),Blocks.RED_WOOL.defaultBlockState());}
+        // Textured terrain/foliage fixture for judging whether structural lines drown out surface detail.
+        for(int x=5;x<=12;x++)for(int z=8;z<=14;z++) {
+            int top=99+(x>8?1:0)+(z>11?1:0);
+            for(int y=99;y<=top;y++)level.setBlockAndUpdate(new BlockPos(x,y,z),
+                    (y==top?Blocks.GRASS_BLOCK:Blocks.STONE).defaultBlockState());
+        }
+        for(int y=101;y<=104;y++)level.setBlockAndUpdate(new BlockPos(9,y,10),Blocks.OAK_LOG.defaultBlockState());
+        for(int x=7;x<=11;x++)for(int z=8;z<=12;z++)for(int y=104;y<=106;y++)
+            if((x!=9||z!=10||y>104)&&Math.abs(x-9)+Math.abs(z-10)+(y-104)<5)
+                level.setBlockAndUpdate(new BlockPos(x,y,z),Blocks.OAK_LEAVES.defaultBlockState().setValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT,true));
+        for(int x=5;x<=6;x++)for(int z=11;z<=13;z++)level.setBlockAndUpdate(new BlockPos(x,99,z),Blocks.WATER.defaultBlockState());
         level.setBlockAndUpdate(MINE,Blocks.DIRT.defaultBlockState());level.setBlockAndUpdate(REAL_CHANGE,Blocks.RED_WOOL.defaultBlockState());
         level.setBlockAndUpdate(CHEST,Blocks.CHEST.defaultBlockState());level.setBlockAndUpdate(ENDER,Blocks.ENDER_CHEST.defaultBlockState());
         level.setBlockAndUpdate(SHULKER,Blocks.PURPLE_SHULKER_BOX.defaultBlockState());level.setBlockAndUpdate(BOOK,Blocks.ENCHANTING_TABLE.defaultBlockState());level.setBlockAndUpdate(BELL,Blocks.BELL.defaultBlockState());
@@ -311,8 +358,44 @@ public final class ClientVisualSmoke {
     private static void click(KeyMapping mapping){KeyMapping.click(mapping.getKey());}
     private static Entity live(UUID id){for(var entity:Minecraft.getInstance().level.entitiesForRendering())if(entity.getUUID().equals(id))return entity;return null;}
     private void shot(String name)throws Exception{try(var image=Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())){image.writeToFile(output.resolve(name));}}
+    private void checkLinework() throws Exception {
+        try(var image=Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
+            int count=0,bright=0,black=0;double sum=0;
+            // Frozen cow and its silhouette: excludes sky/void, HUD and held weapon.
+            for(int y=image.getHeight()*30/100;y<image.getHeight()*70/100;y++)for(int x=image.getWidth()*43/100;x<image.getWidth()*56/100;x++) {
+                int c=image.getPixelRGBA(x,y);double l=((c&255)+((c>>8)&255)+((c>>16)&255))/765.0;
+                sum+=l;count++;if(l>.72)bright++;if(l<.035)black++;
+            }
+            double mean=sum/count,lines=(double)bright/count,dark=(double)black/count;
+            Files.writeString(output.resolve("linework-metrics.txt"),"mean="+mean+" white="+lines+" black="+dark+"\n");
+            require(mean>.08&&mean<.30,"Frozen surface did not become readable dark-gray linework: mean="+mean);
+            require(lines>.001&&lines<.15,"World lacks sparse bright contours, or has too many: "+lines);
+            require(dark<.15,"Linework crushed world surfaces into black: "+dark);
+            int contour=0,contourCount=0,leak=0,leakCount=0;
+            for(int y=image.getHeight()*35/100;y<image.getHeight()*58/100;y++)for(int x=image.getWidth()*395/1000;x<image.getWidth()*425/1000;x++) {
+                int c=image.getPixelRGBA(x,y);if(((c&255)+((c>>8)&255)+((c>>16)&255))>551)contour++;contourCount++;
+            }
+            for(int y=image.getHeight()*50/100;y<image.getHeight()*60/100;y++)for(int x=image.getWidth()*27/100;x<image.getWidth()*36/100;x++) {
+                int c=image.getPixelRGBA(x,y);if(((c&255)+((c>>8)&255)+((c>>16)&255))>497)leak++;leakCount++;
+            }
+            require((double)contour/contourCount>.02,"Frozen cow silhouette lost its fine structural contour");
+            require((double)leak/leakCount<.02,"Live white projection leaked through the foreground opaque block");
+            checks.add("Rendered world retained gray surface tones with sparse white contours and no crushed black surfaces");
+        }
+    }
+    private void checkFoliage() {
+        try(var image=Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
+            int white=0,count=0;
+            for(int y=image.getHeight()*22/100;y<image.getHeight()*32/100;y++)for(int x=image.getWidth()*395/1000;x<image.getWidth()*48/100;x++) {
+                int c=image.getPixelRGBA(x,y);if(((c&255)+((c>>8)&255)+((c>>16)&255))>497)white++;count++;
+            }
+            require((double)white/count<.18,"Leaf cutouts became dense white linework: "+(double)white/count);
+            checks.add("Textured foliage retained restrained line density after window resizing");
+        }
+    }
     private static void require(boolean condition,String message){if(!condition)throw new AssertionError(message);}
     private void finish(Throwable failure){
+        if(originalGraphics!=null)Minecraft.getInstance().options.graphicsMode().set(originalGraphics);
         if(finished)return;finished=true;var mc=Minecraft.getInstance();mc.options.keyAttack.setDown(false);mc.options.keyUse.setDown(false);
         try {Files.createDirectories(output);Files.writeString(output.resolve("result.txt"),(failure==null?"PASS":"FAIL at "+step+": "+failure)+"\n"+String.join("\n",checks)+"\n");
             if(failure!=null){shot("failure.png");failure.printStackTrace();}System.out.println("STILLWORLD CLIENT SMOKE "+(failure==null?"PASS":"FAIL")+" -> "+output);

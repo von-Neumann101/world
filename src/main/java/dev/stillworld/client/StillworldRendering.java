@@ -47,16 +47,23 @@ public final class StillworldRendering {
     }
 
     public static void render(RenderLevelStageEvent event) {
+        if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_PARTICLES && StillworldClient.active() && Minecraft.useShaderTransparency()) {
+            // Fabulous clears main depth when compositing its separate translucent targets.
+            // Preserve the opaque world before that composite, while leaving its active target intact.
+            captureDepth();
+            return;
+        }
         if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_LEVEL && StillworldClient.active()) {
-            // PostChain clears the main depth attachment. Keep the completed world depth for colored residual bodies.
+            if(!Minecraft.useShaderTransparency())captureDepth();
+            if(savedDepth==null)return;
             var main = Minecraft.getInstance().getMainRenderTarget();
-            if (savedDepth == null) savedDepth = new TextureTarget(main.width, main.height, true, Minecraft.ON_OSX);
-            else if (savedDepth.width != main.width || savedDepth.height != main.height) savedDepth.resize(main.width, main.height, Minecraft.ON_OSX);
-            savedDepth.copyDepthFrom(main); main.bindWrite(false);
+            main.copyDepthFrom(savedDepth); main.bindWrite(false);
             worldProjection = new Matrix4f(event.getProjectionMatrix());
             worldView = new Matrix4f(event.getModelViewMatrix());
             worldCamera = event.getCamera().getPosition();
             worldPartial = event.getPartialTick().getGameTimeDeltaPartialTick(false);
+            StillworldPostEffect.render(event);
+            afterPostEffect(event);
             return;
         }
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_ENTITIES) return;
@@ -71,14 +78,6 @@ public final class StillworldRendering {
                 if (StillworldClient.isDead(ghost.getUUID()) || StillworldClient.phased(ghost)) continue;
                 if (event.getFrustum().isVisible(ghost.getBoundingBox().inflate(.5))) draw(ghost, 1, camera, pose, buffers, -1, false);
             }
-            if (StillworldClient.seeLive()) {
-                for (var entity : mc.level.entitiesForRendering()) {
-                    if (!(entity instanceof LivingEntity) || entity == mc.player || StillworldClient.phased(entity)
-                            || StillworldClient.locked(entity) || !entity.isAlive()) continue;
-                    if (event.getFrustum().isVisible(entity.getBoundingBox().inflate(.5)))
-                        draw(entity, partial, camera, pose, buffers, 0x48FFFFFF, true);
-                }
-            }
         } else {
             for (var original : mc.level.entitiesForRendering()) {
                 var clone = StillworldClient.frozenReplacement(original);
@@ -87,8 +86,16 @@ public final class StillworldRendering {
             }
         }
         if (!StillworldClient.active()) renderPhasedPlayers(pose, buffers, camera, partial);
-        if (StillworldClient.active()) renderSlashes(pose, buffers, camera);
         buffers.endBatch();
+    }
+
+    private static void captureDepth() {
+        var main=Minecraft.getInstance().getMainRenderTarget();
+        int previous=org.lwjgl.opengl.GL11.glGetInteger(org.lwjgl.opengl.GL30.GL_FRAMEBUFFER_BINDING);
+        if(savedDepth==null)savedDepth=new TextureTarget(main.width,main.height,true,Minecraft.ON_OSX);
+        else if(savedDepth.width!=main.width||savedDepth.height!=main.height)savedDepth.resize(main.width,main.height,Minecraft.ON_OSX);
+        savedDepth.copyDepthFrom(main);
+        com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(org.lwjgl.opengl.GL30.GL_FRAMEBUFFER,previous);
     }
 
     private static void renderPhasedPlayers(PoseStack pose, MultiBufferSource buffers, Vec3 camera, float partial) {
@@ -104,8 +111,8 @@ public final class StillworldRendering {
         }
     }
 
-    /** Called after the monochrome post chain and before GUI projection/depth setup. */
-    public static void afterPostEffect() {
+    /** Restore scene depth so unfiltered skills and colored residuals remain occluded by terrain. */
+    private static void afterPostEffect(RenderLevelStageEvent event) {
         if (!StillworldClient.active() || savedDepth == null || worldProjection == null) return;
         var mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return;
@@ -118,8 +125,17 @@ public final class StillworldRendering {
         mc.gameRenderer.lightTexture().turnOnLightLayer();
         try {
             var buffers = mc.renderBuffers().bufferSource();
-            renderPhasedPlayers(new PoseStack(), buffers, worldCamera, worldPartial);
+            var pose=new PoseStack();
+            if(StillworldClient.seeLive())for(var entity:mc.level.entitiesForRendering()) {
+                if(!(entity instanceof LivingEntity)||entity==mc.player||StillworldClient.phased(entity)
+                        ||StillworldClient.locked(entity)||!entity.isAlive())continue;
+                if(event.getFrustum().isVisible(entity.getBoundingBox().inflate(.5)))
+                    draw(entity,worldPartial,worldCamera,pose,buffers,0x48FFFFFF,true);
+            }
+            renderSlashes(pose,buffers,worldCamera);
+            renderPhasedPlayers(pose, buffers, worldCamera, worldPartial);
             buffers.endBatch();
+            SkillParticles.renderEffects(event);
         } finally {
             mc.gameRenderer.lightTexture().turnOffLightLayer();
             stack.popMatrix(); RenderSystem.applyModelViewMatrix();

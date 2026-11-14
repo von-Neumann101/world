@@ -12,6 +12,7 @@ public abstract class ParticleRenderMixin {
     @Redirect(method = "render(Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;FLnet/minecraft/client/renderer/culling/Frustum;Ljava/util/function/Predicate;)V",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/client/particle/Particle;render(Lcom/mojang/blaze3d/vertex/VertexConsumer;Lnet/minecraft/client/Camera;F)V"))
     private void stillworld$freezeInterpolation(Particle particle, VertexConsumer vertices, Camera camera, float partial) {
+        if(!SkillParticles.visible(particle))return;
         particle.render(vertices, camera, SkillParticles.freeze(particle) ? 1 : partial);
     }
 }

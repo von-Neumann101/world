@@ -98,6 +98,9 @@ public final class MultiplayerVisualSmoke {
                 mc.options.fov().set(70);
                 mc.options.guiScale().set(2);
                 mc.options.entityShadows().set(true);
+                // Exercise residual layering after Fabulous' separate transparency composite.
+                mc.options.graphicsMode().set(net.minecraft.client.GraphicsStatus.FABULOUS);
+                mc.levelRenderer.allChanged();
                 configured = true;
             }
             mc.setScreen(null);
@@ -370,8 +373,7 @@ public final class MultiplayerVisualSmoke {
     }
 
     private static boolean monochromeLoaded() {
-        var effect = Minecraft.getInstance().gameRenderer.currentEffect();
-        return effect != null && effect.getName().equals("stillworld:shaders/post/monochrome.json");
+        return StillworldPostEffect.settled();
     }
 
     private static double chroma(NativeImage image, double x1, double y1, double x2, double y2) {

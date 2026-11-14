@@ -16,7 +16,6 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.AnimationState;
 import net.minecraft.world.entity.Entity;
@@ -52,7 +51,6 @@ import java.util.*;
 public final class StillworldClient {
     private static final KeyMapping TOGGLE = new KeyMapping("key.stillworld.toggle", GLFW.GLFW_KEY_V, "key.categories.stillworld");
     private static final KeyMapping MARK = new KeyMapping("key.stillworld.mark", GLFW.GLFW_KEY_R, "key.categories.stillworld");
-    private static final ResourceLocation MONOCHROME = ResourceLocation.fromNamespaceAndPath(Stillworld.ID, "shaders/post/monochrome.json");
     private static UUID session;
     private static Rank rank;
     private static final Map<UUID, Entity> GHOSTS = new LinkedHashMap<>();
@@ -68,13 +66,13 @@ public final class StillworldClient {
     private static int useDelay;
     private static long frozenDay, frozenTime;
     private static float frozenRain, frozenThunder;
-    private static boolean effectLoaded;
     private static net.minecraft.client.multiplayer.ClientLevel knownLevel;
 
     public StillworldClient(IEventBus modBus) {
         modBus.addListener(StillworldClient::keys);
         modBus.addListener(StillworldClient::setup);
         modBus.addListener(SilhouetteRenderType::registerShaders);
+        modBus.addListener(StillworldPostEffect::registerReloads);
         NeoForge.EVENT_BUS.addListener(StillworldClient::tick);
         NeoForge.EVENT_BUS.addListener(StillworldClient::interaction);
         NeoForge.EVENT_BUS.addListener(StillworldClient::hud);
@@ -154,8 +152,7 @@ public final class StillworldClient {
                     if (clone != null) { copyAnimation(entity, clone, true); ENTRY_ANIMATIONS.put(entity.getUUID(), clone); }
                 }
                 mc.level.setDayTime(frozenDay); mc.level.setGameTime(frozenTime);
-                mc.gameRenderer.loadEffect(MONOCHROME);
-                effectLoaded = mc.gameRenderer.currentEffect() != null && mc.gameRenderer.currentEffect().getName().equals(MONOCHROME.toString());
+                StillworldPostEffect.begin(mc.player.position().add(0,1,0));
             }
             case "end" -> clearSession();
             default -> {
@@ -268,14 +265,9 @@ public final class StillworldClient {
     private static void clearSession() {
         session = null; rank = null; GHOSTS.clear(); ENTRY_ANIMATIONS.clear(); DEAD.clear(); SLASHES.clear(); PLACED.clear();
         breaking = null; breakingTicks = 0; attackDelay = useDelay = 0;
-        var mc = Minecraft.getInstance();
         StillworldRendering.clear();
         FrozenBlockEntities.clear();
-        if (effectLoaded) {
-            if (mc.gameRenderer.currentEffect() != null && mc.gameRenderer.currentEffect().getName().equals(MONOCHROME.toString()))
-                mc.gameRenderer.checkEntityPostEffect(mc.getCameraEntity());
-            effectLoaded = false;
-        }
+        StillworldPostEffect.clear();
     }
 
     private static CompoundTag action(String op) {
