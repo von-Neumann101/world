@@ -1,0 +1,14 @@
+{
+  "vertex": "stillworld:connection",
+  "fragment": "stillworld:connection",
+  "attributes": ["Position"],
+  "samplers": [{"name":"SceneSampler"},{"name":"DepthSampler"},{"name":"ConnectionSampler"}],
+  "uniforms": [
+    {"name":"InverseViewProjection","type":"matrix4x4","count":16,"values":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},
+    {"name":"PlaneCenter","type":"float","count":3,"values":[0,0,32]},
+    {"name":"PlaneNormal","type":"float","count":3,"values":[0,0,1]},
+    {"name":"PlaneRight","type":"float","count":3,"values":[1,0,0]},
+    {"name":"HalfSize","type":"float","count":2,"values":[18,24]},
+    {"name":"Strength","type":"float","count":1,"values":[0]}
+  ]
+}

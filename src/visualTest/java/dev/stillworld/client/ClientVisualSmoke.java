@@ -68,6 +68,8 @@ public final class ClientVisualSmoke {
     private final List<String> checks = new ArrayList<>();
     private Step step = Step.WORLD;
     private int age;
+    private int connectionViewsBeforeFabulous;
+    private Vec3 connectionBeforeReload;
     private boolean finished, sent;
     private volatile boolean serverDone;
     private volatile Throwable serverFailure;
@@ -106,6 +108,11 @@ public final class ClientVisualSmoke {
                 }
                 if (++age % 200 == 0) System.out.println("STILLWORLD VISUAL: waiting for world, screen="+(mc.screen==null?"none":mc.screen.getClass().getName()));
                 if (mc.player == null || mc.level == null || mc.getSingleplayerServer() == null) return;
+                if(Boolean.getBoolean("stillworld.hiddenTestWindow")) {
+                    require(org.lwjgl.glfw.GLFW.glfwGetWindowAttrib(mc.getWindow().getWindow(),org.lwjgl.glfw.GLFW.GLFW_VISIBLE)==0,"Hidden client unexpectedly became visible");
+                    require(org.lwjgl.glfw.GLFW.glfwGetInputMode(mc.getWindow().getWindow(),org.lwjgl.glfw.GLFW.GLFW_CURSOR)==org.lwjgl.glfw.GLFW.GLFW_CURSOR_NORMAL,"Automated client captured the desktop cursor");
+                    checks.add("Actual Minecraft window remained hidden and desktop cursor mode stayed normal");
+                }
                 var expected = mc.gameDirectory.toPath().resolve("saves/StillworldSmoke").toAbsolutePath().normalize();
                 var actual = mc.getSingleplayerServer().getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
                 require(expected.equals(actual), "Refused to modify a world outside the dedicated StillworldSmoke folder: "+actual);
@@ -132,7 +139,9 @@ public final class ClientVisualSmoke {
                 case ENTER -> {
                     var ghost=StillworldClient.ghosts().get(cowId);
                     if(StillworldClient.active() && (age==4||age==9||age==16||age==28))shot("scan-"+age+".png");
-                    if(!StillworldClient.active()||ghost==null||age<65)return;
+                    if(!StillworldClient.active()||ghost==null||age<65||ConnectionRenderer.renderedViews()<3)return;
+                    checks.add("Independent connection scene rendered in the actual Minecraft client");
+                    shot("connection-entry.png");
                     require(StillworldPostEffect.settled(),"World linework shader did not finish its entry wave");
                     DistanceShaderProbe.check(output);
                     checks.add("Actual shader retained near texture contrast, lifted distant shadows into silver haze at 4/16/40/88/184/512 blocks, and preserved pale sky layering");
@@ -195,23 +204,28 @@ public final class ClientVisualSmoke {
                     require(StillworldPostEffect.settled(),"Resize lost the settled world effect");
                     checkFoliage();
                     shot("08-linework-resized.png");
+                    connectionBeforeReload=connectionCenter();
                     reload=mc.reloadResourcePacks();advance(Step.VISION_RELOAD);
                 }
                 case VISION_RELOAD -> {
-                    if(reload==null||!reload.isDone()||mc.getOverlay()!=null||age<45||!StillworldPostEffect.settled())return;
+                    if(reload==null||!reload.isDone()||mc.getOverlay()!=null||age<45||!StillworldPostEffect.settled()||ConnectionRenderer.renderedViews()<3)return;
                     reload.join();
+                    require(connectionBeforeReload.distanceTo(connectionCenter())<.0001,"Resource reload relocated the world-anchored connection");
+                    checks.add("Resource reload preserved the same world-space connection while the camera faced another direction");
                     shot("09-linework-resource-reload.png");
                     require(frozenModel.equals(ClientPose.capture(StillworldClient.ghosts().get(cowId))),"Resource reload changed the frozen entity pose");
                     org.lwjgl.glfw.GLFW.glfwSetWindowSize(mc.getWindow().getWindow(),originalWidth,originalHeight);
                     checks.add("Actual window resize and resource reload rebuilt linework and retained the settled state/frozen model");
                     aim(StillworldClient.ghosts().get(cowId).getBoundingBox().getCenter());
                     mc.options.graphicsMode().set(net.minecraft.client.GraphicsStatus.FABULOUS);mc.levelRenderer.allChanged();
+                    connectionViewsBeforeFabulous=ConnectionRenderer.renderedViews();
                     advance(Step.VISION_FABULOUS);
                 }
                 case VISION_FABULOUS -> {
                     if(age<50)return;
                     require(Minecraft.useShaderTransparency(),"Fabulous transparency was not actually enabled");
                     checkLinework();shot("10-linework-fabulous.png");
+                    require(ConnectionRenderer.renderedViews()>connectionViewsBeforeFabulous+3,"Connection scene failed after reload/Fabulous switch");
                     checks.add("Fabulous transparency composition retained scene depth and sparse structural contours");
                     mc.options.graphicsMode().set(net.minecraft.client.GraphicsStatus.FANCY);mc.levelRenderer.allChanged();
                     advance(Step.MARK);
@@ -289,11 +303,24 @@ public final class ClientVisualSmoke {
         level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false,server);level.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(true,server);
         level.getGameRules().getRule(GameRules.RULE_WEATHER_CYCLE).set(false,server);level.setDayTime(6000);level.setWeatherParameters(100000,0,false,false);
         for(var entity:level.getEntities((Entity)null,new AABB(-16,98,-16,16,110,16)))if(!(entity instanceof net.minecraft.world.entity.player.Player))entity.discard();
+        for(var entity:level.getEntities((Entity)null,new AABB(32,98,-12,64,118,12)))if(!(entity instanceof net.minecraft.world.entity.player.Player))entity.discard();
         for(int x=-12;x<=12;x++)for(int z=-8;z<=14;z++){
             level.setBlockAndUpdate(new BlockPos(x,99,z),Blocks.SMOOTH_STONE.defaultBlockState());
             for(int y=100;y<=106;y++)level.setBlockAndUpdate(new BlockPos(x,y,z),Blocks.AIR.defaultBlockState());
         }
         for(int y=100;y<=103;y++){level.setBlockAndUpdate(new BlockPos(-4,y,6),Blocks.LIME_WOOL.defaultBlockState());level.setBlockAndUpdate(new BlockPos(4,y,6),Blocks.RED_WOOL.defaultBlockState());}
+        // The side landmark is outside the ordinary forward view, but visible through the connection.
+        for(int x=32;x<=64;x++)for(int z=-12;z<=12;z++)
+            level.setBlockAndUpdate(new BlockPos(x,99,z),((x+z)%2==0?Blocks.STONE_BRICKS:Blocks.SMOOTH_STONE).defaultBlockState());
+        for(int z=-5;z<=5;z++)for(int y=100;y<=114;y++)if(Math.abs(z)==5||y>=112)
+            level.setBlockAndUpdate(new BlockPos(48,y,z),Blocks.DEEPSLATE_BRICKS.defaultBlockState());
+        level.setBlockAndUpdate(new BlockPos(49,100,2),Blocks.CHEST.defaultBlockState());
+        for(int x=53;x<=55;x++)for(int z=5;z<=7;z++)level.setBlockAndUpdate(new BlockPos(x,99,z),Blocks.IRON_BLOCK.defaultBlockState());
+        level.setBlockAndUpdate(new BlockPos(54,100,6),Blocks.BEACON.defaultBlockState());
+        for(int y=100;y<=105;y++)for(int z=-5;z<=0;z++) {
+            level.setBlockAndUpdate(new BlockPos(39,y,z),Blocks.BLUE_STAINED_GLASS.defaultBlockState());
+            level.setBlockAndUpdate(new BlockPos(41,y,z),Blocks.RED_STAINED_GLASS.defaultBlockState());
+        }
         // Textured terrain/foliage fixture for judging whether structural lines drown out surface detail.
         for(int x=5;x<=12;x++)for(int z=8;z<=14;z++) {
             int top=99+(x>8?1:0)+(z>11?1:0);
@@ -320,6 +347,13 @@ public final class ClientVisualSmoke {
         skeleton.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,new ItemStack(Items.BOW));
         skeleton.setItemSlot(net.minecraft.world.entity.EquipmentSlot.OFFHAND,new ItemStack(Items.TORCH));
         level.addFreshEntity(skeleton);skeletonId=skeleton.getUUID();
+        var remoteSkeleton=EntityType.SKELETON.create(level);require(remoteSkeleton!=null,"Cannot spawn connection glint fixture");
+        remoteSkeleton.setPos(43,100,1);remoteSkeleton.setNoAi(true);
+        var enchantedBow=new ItemStack(Items.BOW);enchantedBow.set(net.minecraft.core.component.DataComponents.ENCHANTMENT_GLINT_OVERRIDE,true);
+        var enchantedHelmet=new ItemStack(Items.DIAMOND_HELMET);enchantedHelmet.set(net.minecraft.core.component.DataComponents.ENCHANTMENT_GLINT_OVERRIDE,true);
+        remoteSkeleton.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,enchantedBow);
+        remoteSkeleton.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD,enchantedHelmet);
+        level.addFreshEntity(remoteSkeleton);
     }
     private void livingRendered(RenderLivingEvent.Pre<?,?> event) {
         var entity=event.getEntity();
@@ -360,6 +394,10 @@ public final class ClientVisualSmoke {
     private static void click(KeyMapping mapping){KeyMapping.click(mapping.getKey());}
     private static Entity live(UUID id){for(var entity:Minecraft.getInstance().level.entitiesForRendering())if(entity.getUUID().equals(id))return entity;return null;}
     private void shot(String name)throws Exception{try(var image=Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())){image.writeToFile(output.resolve(name));}}
+    private static Vec3 connectionCenter() throws Exception {
+        var field=ConnectionRenderer.class.getDeclaredField("connection");field.setAccessible(true);
+        return ((SpatialConnection)field.get(null)).center();
+    }
     private void checkLinework() throws Exception {
         try(var image=Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
             float[] depth=readSceneDepth(image.getWidth(),image.getHeight());

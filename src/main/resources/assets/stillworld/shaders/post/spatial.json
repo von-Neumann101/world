@@ -1,7 +1,0 @@
-{
-  "targets": ["stillworld_spatial"],
-  "passes": [
-    {"name":"stillworld:spatial","intarget":"minecraft:main","outtarget":"stillworld_spatial"},
-    {"name":"blit","intarget":"stillworld_spatial","outtarget":"minecraft:main"}
-  ]
-}
