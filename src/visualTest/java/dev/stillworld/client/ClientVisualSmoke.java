@@ -134,6 +134,8 @@ public final class ClientVisualSmoke {
                     if(StillworldClient.active() && (age==4||age==9||age==16||age==28))shot("scan-"+age+".png");
                     if(!StillworldClient.active()||ghost==null||age<65)return;
                     require(StillworldPostEffect.settled(),"World linework shader did not finish its entry wave");
+                    DistanceShaderProbe.check(output);
+                    checks.add("Actual shader darkened identical surfaces at 4/16/40/88/184 blocks with logarithmic blackness");
                     ghostTick=ghost.tickCount;liveTick=live(cowId).tickCount;frozenTime=mc.level.getGameTime();frozenModel=ClientPose.capture(ghost);
                     for(var entry:originalBlockEntities.entrySet())require(mc.level.getBlockEntity(entry.getKey())!=entry.getValue(),"Entry did not exercise chunk replacement for "+entry.getKey());
                     blockEntityPose=readBlockEntityPose();
@@ -378,7 +380,9 @@ public final class ClientVisualSmoke {
             for(int y=image.getHeight()*50/100;y<image.getHeight()*60/100;y++)for(int x=image.getWidth()*27/100;x<image.getWidth()*36/100;x++) {
                 int c=image.getPixelRGBA(x,y);if(((c&255)+((c>>8)&255)+((c>>16)&255))>497)leak++;leakCount++;
             }
-            require((double)contour/contourCount>.02,"Frozen cow silhouette lost its fine structural contour");
+            // One-sided minimal contours occupy less area than the former two-sided bright outline.
+            require((double)contour/contourCount>.008&&(double)contour/contourCount<.08,
+                    "Frozen cow needs a visible but sparse structural contour: "+(double)contour/contourCount);
             require((double)leak/leakCount<.02,"Live white projection leaked through the foreground opaque block");
             checks.add("Rendered world retained gray surface tones with sparse white contours and no crushed black surfaces");
         }
@@ -389,7 +393,7 @@ public final class ClientVisualSmoke {
             for(int y=image.getHeight()*22/100;y<image.getHeight()*32/100;y++)for(int x=image.getWidth()*395/1000;x<image.getWidth()*48/100;x++) {
                 int c=image.getPixelRGBA(x,y);if(((c&255)+((c>>8)&255)+((c>>16)&255))>497)white++;count++;
             }
-            require((double)white/count<.18,"Leaf cutouts became dense white linework: "+(double)white/count);
+            require((double)white/count<.01,"Minimal foliage still has too much white stippling: "+(double)white/count);
             checks.add("Textured foliage retained restrained line density after window resizing");
         }
     }

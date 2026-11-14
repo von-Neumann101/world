@@ -40,30 +40,32 @@ void main() {
 
     // Keep the original lit texture, with a lifted charcoal floor instead of thresholding it to black.
     float surface = 0.075 + 0.39 * pow(max(luminance, 0.0), 0.88);
-    float haze = smoothstep(24.0, ScanRange, distanceFromEye) * 0.32;
-    surface = mix(surface, 0.29, haze);
     if (sky) surface = 0.19 + luminance * 0.13;
+    // Blackness grows logarithmically in world units, independent of render distance.
+    // Preserve the first four blocks and retain a small amount of texture in the farthest surfaces.
+    float toneDistance = sky ? ScanRange : distanceFromEye;
+    float blackness = min(0.88, 0.28 * log(1.0 + max(toneDistance - 4.0, 0.0) / 12.0));
 
     float edge = texture(EdgeSampler, texCoord).r;
     // Thin isolated structure stays bright. Repeated cutout holes (leaves/grass) remain texture,
     // instead of turning an entire canopy into a mass of white stippling.
-    float density = edge;
-    density += texture(EdgeSampler, texCoord + pixel * vec2(2.0, 0.0)).r;
-    density += texture(EdgeSampler, texCoord + pixel * vec2(-2.0, 0.0)).r;
-    density += texture(EdgeSampler, texCoord + pixel * vec2(0.0, 2.0)).r;
-    density += texture(EdgeSampler, texCoord + pixel * vec2(0.0, -2.0)).r;
-    density += texture(EdgeSampler, texCoord + pixel * vec2(3.0, 3.0)).r;
-    density += texture(EdgeSampler, texCoord + pixel * vec2(-3.0, 3.0)).r;
-    density += texture(EdgeSampler, texCoord + pixel * vec2(3.0, -3.0)).r;
-    density += texture(EdgeSampler, texCoord + pixel * vec2(-3.0, -3.0)).r;
-    density += texture(EdgeSampler, texCoord + pixel * vec2(5.0, 0.0)).r;
-    density += texture(EdgeSampler, texCoord + pixel * vec2(-5.0, 0.0)).r;
-    density += texture(EdgeSampler, texCoord + pixel * vec2(0.0, 5.0)).r;
-    density += texture(EdgeSampler, texCoord + pixel * vec2(0.0, -5.0)).r;
-    edge *= 1.0 - 0.92 * smoothstep(0.23, 0.55, density / 13.0);
-    edge *= 1.0 - 0.6 * smoothstep(32.0, 140.0, distanceFromEye);
+    float density = texture(EdgeSampler, texCoord).g;
+    density += texture(EdgeSampler, texCoord + pixel * vec2(2.0, 0.0)).g;
+    density += texture(EdgeSampler, texCoord + pixel * vec2(-2.0, 0.0)).g;
+    density += texture(EdgeSampler, texCoord + pixel * vec2(0.0, 2.0)).g;
+    density += texture(EdgeSampler, texCoord + pixel * vec2(0.0, -2.0)).g;
+    density += texture(EdgeSampler, texCoord + pixel * vec2(3.0, 3.0)).g;
+    density += texture(EdgeSampler, texCoord + pixel * vec2(-3.0, 3.0)).g;
+    density += texture(EdgeSampler, texCoord + pixel * vec2(3.0, -3.0)).g;
+    density += texture(EdgeSampler, texCoord + pixel * vec2(-3.0, -3.0)).g;
+    density += texture(EdgeSampler, texCoord + pixel * vec2(5.0, 0.0)).g;
+    density += texture(EdgeSampler, texCoord + pixel * vec2(-5.0, 0.0)).g;
+    density += texture(EdgeSampler, texCoord + pixel * vec2(0.0, 5.0)).g;
+    density += texture(EdgeSampler, texCoord + pixel * vec2(0.0, -5.0)).g;
+    edge *= 1.0 - 0.99 * smoothstep(0.23, 0.50, density / 13.0);
+    edge *= 1.0 - 0.8 * smoothstep(12.0, 80.0, distanceFromEye);
     if (sky) edge = 0.0;
-    float linework = mix(surface, 0.86, edge * 0.94);
+    float linework = mix(surface, 0.84, edge * 0.92) * (1.0 - blackness);
     vec3 result = mix(color.rgb, vec3(linework), coverage);
     // Narrow silver-white core and restrained halo follow world distance, not a screen-space circle.
     result = mix(result, vec3(0.9, 0.94, 0.98), front * 0.65);
