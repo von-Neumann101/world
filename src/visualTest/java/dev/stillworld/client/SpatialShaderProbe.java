@@ -16,7 +16,7 @@ import static org.lwjgl.opengl.GL33C.*;
 
 /** Exercises shipped GLSL without starting Minecraft or ever showing/focusing a window. */
 public final class SpatialShaderProbe {
-    private static final int W=640, H=360;
+    private static int W=640, H=360;
     private static final String VERTEX="""
             #version 150
             out vec2 texCoord;
@@ -31,6 +31,7 @@ public final class SpatialShaderProbe {
     private int checks;
 
     public static void main(String[] args) throws Exception {
+        if(args.length>=4){W=Integer.parseInt(args[2]);H=Integer.parseInt(args[3]);}
         try(var errors=GLFWErrorCallback.createPrint(System.err)) {
             errors.set();
             if(!glfwInit())throw new AssertionError("GLFW initialization failed");
@@ -48,7 +49,7 @@ public final class SpatialShaderProbe {
                 glBindVertexArray(glGenVertexArrays());
                 if(glfwGetWindowAttrib(window,GLFW_VISIBLE)!=GLFW_FALSE || glfwGetInputMode(window,GLFW_CURSOR)!=GLFW_CURSOR_NORMAL)
                     throw new AssertionError("Probe must stay hidden with an ordinary cursor");
-                new SpatialShaderProbe().run(Path.of(args[0]),Path.of(args[1]));
+                new SpatialShaderProbe().run(Path.of(args[0]),Path.of(args[1]).resolve(W+"x"+H));
             } finally {glfwDestroyWindow(window);glfwTerminate();glfwSetErrorCallback(null);}
         }
     }
@@ -67,13 +68,31 @@ public final class SpatialShaderProbe {
         var matrix=projection(70,0,0,camera);
         float[] colors=gradient(), near=plane(matrix,6), far=plane(matrix,100), sky=new float[W*H];
         Arrays.fill(sky,1);
+        // Bilinear filtering of the coordinate ramp measures the continuous UV field itself,
+        // without nearest-texel rounding hiding a local fold. Fixtures below use nearest.
+        glBindTexture(GL_TEXTURE_2D,color);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
         upload(edges,GL_RGBA,new float[W*H*4]);
         float[] reference=render(spatial,colors,far,matrix,camera,1,0,5);
         check(difference(colors,reference)<.00001,"zero strength preserves input");
         check(difference(colors,render(spatial,colors,far,matrix,camera,0,1,0))<.00001,"pre-scan preserves input");
-        check(difference(colors,render(spatial,colors,near,matrix,camera,1,1,5))<.00001,"near interaction stays aligned");
+        check(regionDifference(colors,render(spatial,colors,near,matrix,camera,1,1,5),W/2-10,H/2-10,W/2+10,H/2+10)<.00001,
+                "reticle interaction stays aligned");
         float[] changed=render(spatial,colors,far,matrix,camera,1,1,5);
         check(difference(reference,changed)>.001,"far scene visibly deforms");
+        float[] depthTiles=plane(matrix,24);
+        for(int y=0;y<H;y++)for(int x=0;x<W;x++)if((x/40+y/40)%2==0)depthTiles[y*W+x]=far[y*W+x];
+        float[] tiled=render(spatial,colors,depthTiles,matrix,camera,1,1,5);
+        write(output.resolve("depth-boundaries.png"),tiled);
+        double depthSeams=maxDifference(changed,tiled);
+        System.out.println("Depth-imprinted field difference: "+depthSeams);
+        check(depthSeams<.00001,"object depth boundaries do not imprint into the spatial field");
+        check(minJacobian(changed)>.05,"continuous mapping does not fold over itself");
+        for(float entry:new float[]{.2f,.5f,.8f}) {
+            float[] flat=render(spatial,colors,far,matrix,camera,entry,1,5);
+            check(difference(flat,render(spatial,colors,depthTiles,matrix,camera,entry,1,5))<.00001,
+                    "entry transition stays continuous across depth edges at "+entry);
+        }
         for(int distance:new int[]{24,40,100}) {
             float[] displaced=render(spatial,colors,plane(matrix,distance),matrix,camera,1,1,5);
             double pixels=meanDisplacement(colors,displaced);
@@ -92,7 +111,7 @@ public final class SpatialShaderProbe {
         float[] foreground=far.clone();
         for(int y=80;y<280;y++)for(int x=250;x<390;x++)foreground[y*W+x]=near[y*W+x];
         float[] protectedView=render(spatial,colors,foreground,matrix,camera,1,1,5);
-        check(regionDifference(colors,protectedView,250,80,390,280)<.00001,"near foreground remains fixed over a bent background");
+        check(difference(changed,protectedView)<.00001,"foreground and background share the same continuous mapping");
         float[] plain=new float[W*H*4];
         for(int i=0;i<W*H;i++){plain[i*4]=.69f;plain[i*4+1]=.74f;plain[i*4+2]=.8f;plain[i*4+3]=1;}
         check(difference(plain,render(spatial,plain,sky,matrix,camera,1,1,5))<.00001,"sky stays open and color is preserved");
@@ -100,16 +119,28 @@ public final class SpatialShaderProbe {
         float[] blackSky=new float[W*H*4];
         float[] litSky=render(monochrome,blackSky,sky,matrix,camera,1,1,5);
         check(litSky[0]>.55 && litSky[3]>.999,"existing treatment does not turn empty sky black");
-        for(int fov:new int[]{50,70,100})for(int yaw:new int[]{0,75,170}) {
+        for(int fov:new int[]{50,70,110})for(int yaw:new int[]{0,75,170}) {
             var view=projection(fov,yaw,18,camera);
             float[] d=plane(view,100);
             float[] pixels=render(spatial,colors,d,view,camera,1,1,5);
             check(allFinite(pixels)&&borderDifference(colors,pixels)<.00001,"bounded view fov="+fov+" yaw="+yaw);
+            double jacobian=minJacobian(pixels);
+            System.out.println("Minimum field Jacobian fov="+fov+" yaw="+yaw+": "+jacobian);
+            check(jacobian>.05,"unfolded view fov="+fov+" yaw="+yaw);
         }
-        for(int i=0;i<3;i++) {
+        for(var moved:new Vector3f[]{new Vector3f(60,0,60),new Vector3f(250,64,-120)}) {
+            var view=projection(70,35,-12,moved);
+            float[] pixels=render(spatial,colors,plane(view,100),view,moved,1,1,5);
+            double jacobian=minJacobian(pixels);
+            System.out.println("Minimum field Jacobian after movement "+moved+": "+jacobian);
+            check(jacobian>.05,"continuous field after moving away from entry "+moved);
+        }
+        glBindTexture(GL_TEXTURE_2D,color);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+        for(int i=0;i<4;i++) {
             var eye=new Vector3f(i==1?5:0,i==2?3:0,0);
             var view=projection(i==2?95:70,i==1?18:0,i==2?-25:-5,eye);
-            var fixture=fixture(view,eye);
+            var fixture=fixture(view,eye,i==3);
             float[] edgeImage=render(contours,fixture[0],fixture[1],view,eye,1,1,5); upload(edges,GL_RGBA,edgeImage);
             float[] base=render(monochrome,fixture[0],fixture[1],view,eye,1,1,5);
             float[] result=render(spatial,base,fixture[1],view,eye,1,1,5);
@@ -155,11 +186,18 @@ public final class SpatialShaderProbe {
         for(int y=0;y<H;y++)for(int x=0;x<W;x++){int i=(y*W+x)*4;result[i]=.15f+.7f*(x+.5f)/W;result[i+1]=.15f+.7f*(y+.5f)/H;result[i+2]=.25f;result[i+3]=1;}
         return result;
     }
-    private static float[][] fixture(Matrix4f matrix,Vector3f eye) {
+    private static float[][] fixture(Matrix4f matrix,Vector3f eye,boolean scattered) {
         // Independent CPU ray/box scene supplies genuine perspective depth and first-person occlusions.
         float[][] boxes={{-9,-2,-32,-4,12,-25},{4,-2,-55,13,22,-45},{-38,-2,-100,-22,35,-80},
                 {18,-2,-135,42,48,-110},{-75,-2,-240,-40,85,-180},{-1,-2,-7,1,0,-5},
                 {-3,8,-40,3,9,-25},{-3,-2,-40,-2,9,-25},{2,-2,-40,3,9,-25}};
+        if(scattered) {
+            boxes=new float[45][];
+            for(int row=0;row<5;row++)for(int col=0;col<9;col++) {
+                float x=(col-4)*(3+row*2),z=-15-row*12;
+                boxes[row*9+col]=new float[]{x,-2,z,x+1+(col%3),-1+(col%4),z+1};
+            }
+        }
         float[] colors=new float[W*H*4], depths=new float[W*H];var inverse=matrix.invert(new Matrix4f());
         for(int y=0;y<H;y++)for(int x=0;x<W;x++) {
             Vector4f p=inverse.transform(new Vector4f((x+.5f)/W*2-1,(y+.5f)/H*2-1,1,1));
@@ -225,6 +263,15 @@ public final class SpatialShaderProbe {
     private static double difference(float[] a,float[] b){double sum=0;for(int i=0;i<a.length;i++)sum+=Math.abs(a[i]-b[i]);return sum/a.length;}
     private static double maxDifference(float[] a,float[] b){double max=0;for(int i=0;i<a.length;i++)max=Math.max(max,Math.abs(a[i]-b[i]));return max;}
     private static double meanDisplacement(float[] a,float[] b){double sum=0;for(int i=0;i<a.length;i+=4)sum+=Math.hypot((a[i]-b[i])*W/.7,(a[i+1]-b[i+1])*H/.7);return sum/(W*H);}
+    private static double minJacobian(float[] field) {
+        double min=Double.POSITIVE_INFINITY;
+        for(int y=2;y<H-6;y+=4)for(int x=2;x<W-6;x+=4) {
+            int a=(y*W+x)*4,b=a+16,c=a+W*16;
+            double xx=(field[b]-field[a])*W/.7/4,xy=(field[b+1]-field[a+1])*H/.7/4;
+            double yx=(field[c]-field[a])*W/.7/4,yy=(field[c+1]-field[a+1])*H/.7/4;
+            min=Math.min(min,xx*yy-xy*yx);
+        }return min;
+    }
     private static boolean allFinite(float[] a){for(float v:a)if(!Float.isFinite(v)||v<0||v>1)return false;return true;}
     private static double regionDifference(float[] a,float[] b,int x0,int y0,int x1,int y1){double max=0;for(int y=y0;y<y1;y++)for(int x=x0;x<x1;x++)for(int c=0;c<4;c++)max=Math.max(max,Math.abs(a[(y*W+x)*4+c]-b[(y*W+x)*4+c]));return max;}
     private static double borderDifference(float[] a,float[] b){return Math.max(Math.max(regionDifference(a,b,0,0,W,2),regionDifference(a,b,0,H-2,W,H)),Math.max(regionDifference(a,b,0,0,2,H),regionDifference(a,b,W-2,0,W,H)));}

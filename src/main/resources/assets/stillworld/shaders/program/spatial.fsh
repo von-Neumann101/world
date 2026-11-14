@@ -1,13 +1,10 @@
 #version 150
 uniform sampler2D DiffuseSampler;
-uniform sampler2D DepthSampler;
 uniform vec2 InSize;
 uniform mat4 InverseViewProjection;
 uniform mat4 ViewProjection;
 uniform vec3 CameraFromOrigin;
 uniform float ScanProgress;
-uniform float ScanRadius;
-uniform float ScanRange;
 uniform float DistortionStrength;
 in vec2 texCoord;
 out vec4 fragColor;
@@ -17,21 +14,11 @@ vec3 relativePosition(vec2 uv, float depth) {
     return p.xyz / p.w;
 }
 
-float distantWeight(vec2 uv) {
-    float depth = texture(DepthSampler, uv).r;
-    if (depth >= 0.999999) return 1.0;
-    // Leave interaction and nearby silhouettes in their actual screen positions.
-    return smoothstep(12.0, 48.0, length(relativePosition(uv, depth)));
-}
-
 void main() {
-    float depth = texture(DepthSampler, texCoord).r;
-    vec3 position = relativePosition(texCoord, depth);
-    float distanceFromEntry = depth >= 0.999999 ? ScanRange * 0.9 : length(position + CameraFromOrigin);
-    float width = 2.0 + ScanRadius * 0.014;
-    float coverage = 1.0 - smoothstep(-1.0, 1.0, (distanceFromEntry - ScanRadius) / width);
-    coverage = mix(coverage, 1.0, smoothstep(0.86, 1.0, ScanProgress));
-    coverage *= smoothstep(0.0, 0.08, ScanProgress);
+    // One continuous mapping for the entire world image. Scene depth must never gate
+    // displacement: doing so tears the sampling field at every block/entity silhouette.
+    // The preceding color pass still renders the advancing entry scan through the world.
+    float coverage = smoothstep(0.08, 1.0, ScanProgress);
 
     // Refract through a broad, stationary field in world axes, not a lens fixed to the screen.
     // A shared optical shell keeps sky/terrain and distant object boundaries continuous.
@@ -51,23 +38,22 @@ void main() {
     vec4 projected = ViewProjection * vec4(shell - bend, 1.0);
     vec2 refracted = projected.xy / projected.w * 0.5 + 0.5;
     vec2 delta = refracted - texCoord;
-    delta *= min(1.0, 0.075 / max(length(delta), 0.00001));
+    vec2 aspect = vec2(InSize.x / InSize.y, 1.0);
+    // Bound in both UV and viewport-height units. A UV-only horizontal cap grows
+    // with ultrawide windows and can fold the field around the fixed-size reticle.
+    float extent = max(length(delta) / 0.075, length(delta * aspect) / 0.12);
+    delta /= max(1.0, extent);
 
-    // Fade at the border instead of stretching clamped edge pixels into missing geometry.
+    // Broad, smooth protection at the frame and reticle, independent of object boundaries.
+    // Keep the crosshair ray exact while allowing off-axis foreground to follow the space.
     vec2 border = min(texCoord, 1.0 - texCoord);
-    float frame = smoothstep(0.008, 0.10, min(border.x, border.y));
-    float amount = coverage * clamp(DistortionStrength, 0.0, 1.0) * frame;
-    delta *= amount;
-    float protection = distantWeight(texCoord);
+    vec2 frameAxes = smoothstep(vec2(0.008), vec2(0.20), border);
+    float frame = frameAxes.x * frameAxes.y;
+    vec2 fromReticle = (texCoord - 0.5) * aspect;
+    float aiming = smoothstep(0.08, 0.32, length(fromReticle));
+    delta *= coverage * clamp(DistortionStrength, 0.0, 1.0) * frame * aiming;
     vec2 halfPixel = 0.5 / InSize;
-    vec2 candidate = clamp(texCoord + delta * protection, halfPixel, 1.0 - halfPixel);
-    // Protect foreground sampled along the refraction path, not just at its destination.
-    // Combine depth weights with min: multiplying them suppresses the midrange twice.
-    protection = min(protection, distantWeight(candidate));
-    protection = min(protection, distantWeight(mix(texCoord, candidate, 0.5)));
-    protection = min(protection, distantWeight(mix(texCoord, candidate, 0.25)));
-    protection = min(protection, distantWeight(mix(texCoord, candidate, 0.75)));
-    vec2 source = clamp(texCoord + delta * protection, halfPixel, 1.0 - halfPixel);
+    vec2 source = clamp(texCoord + delta, halfPixel, 1.0 - halfPixel);
     // Run after the unfiltered skill/residual layer; never desaturate or dim that composition.
     fragColor = vec4(texture(DiffuseSampler, source).rgb, 1.0);
 }
