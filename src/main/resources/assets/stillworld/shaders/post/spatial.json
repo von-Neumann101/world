@@ -1,7 +1,18 @@
 {
-  "targets": ["stillworld_spatial"],
+  "targets": [
+    "stillworld_spatial",
+    {"name":"stillworld_radius","width":32,"height":18},
+    {"name":"stillworld_radius_blur","width":32,"height":18}
+  ],
   "passes": [
-    {"name":"stillworld:spatial","intarget":"minecraft:main","outtarget":"stillworld_spatial"},
+    {"name":"stillworld:radial_distance","intarget":"minecraft:main","outtarget":"stillworld_radius",
+      "auxtargets":[{"name":"DepthSampler","id":"minecraft:main:depth"}]},
+    {"name":"stillworld:radial_blur","intarget":"stillworld_radius","outtarget":"stillworld_radius_blur",
+      "uniforms":[{"name":"Direction","values":[1,0]}]},
+    {"name":"stillworld:radial_blur","intarget":"stillworld_radius_blur","outtarget":"stillworld_radius",
+      "uniforms":[{"name":"Direction","values":[0,1]}]},
+    {"name":"stillworld:spatial","intarget":"minecraft:main","outtarget":"stillworld_spatial",
+      "auxtargets":[{"name":"StrengthSampler","id":"stillworld_radius"}]},
     {"name":"blit","intarget":"stillworld_spatial","outtarget":"minecraft:main"}
   ]
 }

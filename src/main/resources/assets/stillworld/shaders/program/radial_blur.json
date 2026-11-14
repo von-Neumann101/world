@@ -1,0 +1,11 @@
+{
+  "vertex": "stillworld:field",
+  "fragment": "stillworld:radial_blur",
+  "attributes": ["Position"],
+  "samplers": [{"name":"DiffuseSampler"}],
+  "uniforms": [
+    {"name":"OutSize","type":"float","count":2,"values":[32,18]},
+    {"name":"InSize","type":"float","count":2,"values":[32,18]},
+    {"name":"Direction","type":"float","count":2,"values":[1,0]}
+  ]
+}

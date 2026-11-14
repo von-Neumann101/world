@@ -139,6 +139,7 @@ public final class ClientVisualSmoke {
                     if(StillworldClient.active() && (age==4||age==9||age==16||age==28))shot("scan-"+age+".png");
                     if(!StillworldClient.active()||ghost==null||age<65)return;
                     require(StillworldPostEffect.settled(),"World linework shader did not finish its entry wave");
+                    checkRadialField();
                     DistanceShaderProbe.check(output);
                     checks.add("Actual shader retained near texture contrast, lifted distant shadows into silver haze at 4/16/40/88/184/512 blocks, and preserved pale sky layering");
                     ghostTick=ghost.tickCount;liveTick=live(cowId).tickCount;frozenTime=mc.level.getGameTime();frozenModel=ClientPose.capture(ghost);
@@ -198,6 +199,7 @@ public final class ClientVisualSmoke {
                     if(age<15)return;
                     require(mc.getMainRenderTarget().width==1024&&mc.getMainRenderTarget().height==576,"Client window did not really resize");
                     require(StillworldPostEffect.settled(),"Resize lost the settled world effect");
+                    checkRadialField();
                     checkFoliage();
                     shot("08-linework-resized.png");
                     reload=mc.reloadResourcePacks();advance(Step.VISION_RELOAD);
@@ -205,6 +207,7 @@ public final class ClientVisualSmoke {
                 case VISION_RELOAD -> {
                     if(reload==null||!reload.isDone()||mc.getOverlay()!=null||age<45||!StillworldPostEffect.settled())return;
                     reload.join();
+                    checkRadialField();
                     shot("09-linework-resource-reload.png");
                     require(frozenModel.equals(ClientPose.capture(StillworldClient.ghosts().get(cowId))),"Resource reload changed the frozen entity pose");
                     org.lwjgl.glfw.GLFW.glfwSetWindowSize(mc.getWindow().getWindow(),originalWidth,originalHeight);
@@ -216,6 +219,7 @@ public final class ClientVisualSmoke {
                 case VISION_FABULOUS -> {
                     if(age<50)return;
                     require(Minecraft.useShaderTransparency(),"Fabulous transparency was not actually enabled");
+                    checkRadialField();
                     checkLinework();shot("10-linework-fabulous.png");
                     checks.add("Fabulous transparency composition retained scene depth and sparse structural contours");
                     mc.options.graphicsMode().set(net.minecraft.client.GraphicsStatus.FANCY);mc.levelRenderer.allChanged();
@@ -365,6 +369,28 @@ public final class ClientVisualSmoke {
     private static void click(KeyMapping mapping){KeyMapping.click(mapping.getKey());}
     private static Entity live(UUID id){for(var entity:Minecraft.getInstance().level.entitiesForRendering())if(entity.getUUID().equals(id))return entity;return null;}
     private void shot(String name)throws Exception{try(var image=Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())){image.writeToFile(output.resolve(name));}}
+    private void checkRadialField() throws Exception {
+        var field=StillworldPostEffect.class.getDeclaredField("spatialChain");field.setAccessible(true);
+        var chain=(net.minecraft.client.renderer.PostChain)field.get(null);
+        require(chain!=null,"Radial post chain was not loaded");
+        var target=chain.getTempTarget("stillworld_radius");
+        var scratch=chain.getTempTarget("stillworld_radius_blur");
+        require(target!=null&&scratch!=null&&target.width==32&&target.height==18&&scratch.width==32&&scratch.height==18,
+                "Window resize changed the fixed radial-field resolution");
+        try(var image=Screenshot.takeScreenshot(target)) {
+            int low=255,high=0;
+            for(int y=0;y<18;y++)for(int x=0;x<32;x++) {
+                int value=image.getPixelRGBA(x,y)&255;
+                // Every ray in the dedicated scene reaches a surface or sky beyond the eye.
+                require(value>0,"Coarse field did not cover its whole target at "+x+","+y);
+                low=Math.min(low,value);high=Math.max(high,value);
+            }
+            require(high-low>=2,"Coarse field lost the scene's different distances");
+            Files.writeString(output.resolve("radial-"+step+".txt"),"32x18 field; encoded range="+low+".."+high+"\n");
+        } finally {Minecraft.getInstance().getMainRenderTarget().bindWrite(true);}
+        checks.add("Entry-distance field covered all 32x18 cells and varied with scene depth at "+step);
+    }
+
     private void checkLinework() throws Exception {
         try(var image=Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
             float[] depth=readSceneDepth(image.getWidth(),image.getHeight());
@@ -391,20 +417,31 @@ public final class ClientVisualSmoke {
         }
     }
     private void checkFoliage() throws Exception {
-        try(var image=Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
+        // Saved depth is pre-refraction. Measure the matching color stage so displaced
+        // sky through leaf cutouts is not miscounted as bright surface stippling.
+        var field=StillworldPostEffect.class.getDeclaredField("chain");field.setAccessible(true);
+        var chain=(net.minecraft.client.renderer.PostChain)field.get(null);
+        var target=chain.getTempTarget("stillworld_swap");
+        require(target!=null,"Missing pre-refraction foliage image");
+        try(var image=Screenshot.takeScreenshot(target);
+            var finalImage=Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
             int x0=image.getWidth()*395/1000,x1=image.getWidth()*48/100;
             int y0=image.getHeight()*22/100,y1=image.getHeight()*32/100;
             float[] depth=readSceneDepth(image.getWidth(),image.getHeight());
-            int white=0,count=0;
+            int white=0,count=0,misalignedWhite=0;
             for(int y=y0;y<y1;y++)for(int x=x0;x<x1;x++) {
                 // Pale sky through a leaf cutout is background, not a white line on foliage.
                 if(depth[(image.getHeight()-1-y)*image.getWidth()+x]>=.999999f)continue;
                 int c=image.getPixelRGBA(x,y);if(((c&255)+((c>>8)&255)+((c>>16)&255))>497)white++;count++;
+                int finalColor=finalImage.getPixelRGBA(x,y);
+                if(((finalColor&255)+((finalColor>>8)&255)+((finalColor>>16)&255))>497)misalignedWhite++;
             }
+            Files.writeString(output.resolve("foliage-metrics.txt"),"alignedWhite="+(double)white/count
+                    +"\nmisalignedFinalWhite="+(double)misalignedWhite/count+"\nsurfaceSamples="+count+"\n");
             require(count>(x1-x0)*(y1-y0)/2,"Foliage check did not sample enough actual world geometry");
             require((double)white/count<.01,"Minimal foliage still has too much white stippling: "+(double)white/count);
             checks.add("Textured foliage retained restrained line density after window resizing");
-        }
+        } finally {Minecraft.getInstance().getMainRenderTarget().bindWrite(true);}
     }
     private static float[] readSceneDepth(int width,int height) throws Exception {
         // The world depth survives the hand-rendering clear. Keep this test-only access local;

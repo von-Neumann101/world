@@ -1,5 +1,6 @@
 #version 150
 uniform sampler2D DiffuseSampler;
+uniform sampler2D StrengthSampler;
 uniform vec2 InSize;
 uniform mat4 InverseViewProjection;
 uniform mat4 ViewProjection;
@@ -14,9 +15,25 @@ vec3 relativePosition(vec2 uv, float depth) {
     return p.xyz / p.w;
 }
 
+float strengthAt(vec2 uv) {
+    // PostChain uses nearest filtering on render-target samplers. Interpolate only
+    // this tiny field, leaving the world's existing color filtering unchanged.
+    ivec2 size = textureSize(StrengthSampler, 0);
+    vec2 p = uv * vec2(size) - 0.5;
+    ivec2 cell = ivec2(floor(p));
+    vec2 f = fract(p);
+    ivec2 a = clamp(cell, ivec2(0), size - 1);
+    ivec2 b = clamp(cell + 1, ivec2(0), size - 1);
+    float low = mix(texelFetch(StrengthSampler, a, 0).r,
+        texelFetch(StrengthSampler, ivec2(b.x, a.y), 0).r, f.x);
+    float high = mix(texelFetch(StrengthSampler, ivec2(a.x, b.y), 0).r,
+        texelFetch(StrengthSampler, b, 0).r, f.x);
+    return mix(low, high, f.y) * 16.0;
+}
+
 void main() {
-    // One continuous mapping for the entire world image. Scene depth must never gate
-    // displacement: doing so tears the sampling field at every block/entity silhouette.
+    // One continuous mapping for the entire world image. Distance influences it
+    // through a coarse, blurred field, never raw block/entity depth boundaries.
     // The preceding color pass still renders the advancing entry scan through the world.
     float coverage = smoothstep(0.08, 1.0, ScanProgress);
 
@@ -43,6 +60,11 @@ void main() {
     // with ultrawide windows and can fold the field around the fixed-size reticle.
     float extent = max(length(delta) / 0.075, length(delta * aspect) / 0.12);
     delta /= max(1.0, extent);
+    // One tenth of the original field at 64 blocks from entry; logarithmic growth
+    // before that radius and linear growth beyond it are evaluated by the coarse pass.
+    delta *= 0.10 * strengthAt(texCoord);
+    extent = max(length(delta) / 0.075, length(delta * aspect) / 0.12);
+    delta /= max(1.0, extent);
 
     // Broad, smooth protection at the frame and reticle, independent of object boundaries.
     // Keep the crosshair ray exact while allowing off-axis foreground to follow the space.
@@ -51,8 +73,7 @@ void main() {
     float frame = frameAxes.x * frameAxes.y;
     vec2 fromReticle = (texCoord - 0.5) * aspect;
     float aiming = smoothstep(0.08, 0.32, length(fromReticle));
-    // Keep only a subtle trace of refraction: one tenth of the former continuous field.
-    delta *= 0.10 * coverage * clamp(DistortionStrength, 0.0, 1.0) * frame * aiming;
+    delta *= coverage * clamp(DistortionStrength, 0.0, 1.0) * frame * aiming;
     vec2 halfPixel = 0.5 / InSize;
     vec2 source = clamp(texCoord + delta, halfPixel, 1.0 - halfPixel);
     // Run after the unfiltered skill/residual layer; never desaturate or dim that composition.

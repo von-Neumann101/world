@@ -17,6 +17,9 @@ import static org.lwjgl.opengl.GL33C.*;
 /** Exercises shipped GLSL without starting Minecraft or ever showing/focusing a window. */
 public final class SpatialShaderProbe {
     private static int W=640, H=360;
+    private static final int FW=32,FH=18;
+    private int spatialProgram,distanceProgram,blurProgram;
+    private final int radial=texture(GL_RGBA8,GL_RGBA,FW,FH),radialSwap=texture(GL_RGBA8,GL_RGBA,FW,FH);
     private static final String VERTEX="""
             #version 150
             out vec2 texCoord;
@@ -61,7 +64,10 @@ public final class SpatialShaderProbe {
         glBindFramebuffer(GL_FRAMEBUFFER,framebuffer);
         glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,target,0);
         if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE)throw new AssertionError("Incomplete framebuffer");
-        int spatial=program(shaders.resolve("spatial.fsh"));
+        int spatial=spatialProgram=program(shaders.resolve("spatial.fsh"));
+        distanceProgram=program(shaders.resolve("radial_distance.fsh"));
+        blurProgram=program(shaders.resolve("radial_blur.fsh"));
+        checkRadialCurve();
         int contours=program(shaders.resolve("contours.fsh"));
         int monochrome=program(shaders.resolve("monochrome.fsh"));
         var camera=new Vector3f();
@@ -86,17 +92,19 @@ public final class SpatialShaderProbe {
         float[] tiled=render(spatial,colors,depthTiles,matrix,camera,1,1,5);
         write(output.resolve("depth-boundaries.png"),tiled);
         double depthSeams=maxDifference(changed,tiled);
-        System.out.println("Depth-imprinted field difference: "+depthSeams);
-        check(depthSeams<.00001,"object depth boundaries do not imprint into the spatial field");
+        System.out.println("Smoothed distance-field difference: "+depthSeams);
+        check(maxFieldStep(colors,tiled)<.25,"depth edges produce a smooth field instead of object-shaped tears");
         check(minJacobian(changed)>.05,"continuous mapping does not fold over itself");
         for(float entry:new float[]{.2f,.5f,.8f}) {
-            float[] flat=render(spatial,colors,far,matrix,camera,entry,1,5);
-            check(difference(flat,render(spatial,colors,depthTiles,matrix,camera,entry,1,5))<.00001,
+            check(maxFieldStep(colors,render(spatial,colors,depthTiles,matrix,camera,entry,1,5))<.25,
                     "entry transition stays continuous across depth edges at "+entry);
         }
+        double previousDisplacement=0;
         for(int distance:new int[]{24,40,100}) {
             float[] displaced=render(spatial,colors,plane(matrix,distance),matrix,camera,1,1,5);
             double pixels=meanDisplacement(colors,displaced);
+            check(pixels>previousDisplacement,"composed displacement increases with distance at "+distance);
+            previousDisplacement=pixels;
             report.append("Mean displacement at ").append(distance).append(" blocks: ").append(pixels).append(" pixels\n");
             System.out.println("Mean displacement at "+distance+" blocks: "+pixels+" pixels");
         }
@@ -112,7 +120,7 @@ public final class SpatialShaderProbe {
         float[] foreground=far.clone();
         for(int y=80;y<280;y++)for(int x=250;x<390;x++)foreground[y*W+x]=near[y*W+x];
         float[] protectedView=render(spatial,colors,foreground,matrix,camera,1,1,5);
-        check(difference(changed,protectedView)<.00001,"foreground and background share the same continuous mapping");
+        check(maxFieldStep(colors,protectedView)<.25,"foreground/background transition stays continuous after radial smoothing");
         float[] plain=new float[W*H*4];
         for(int i=0;i<W*H;i++){plain[i*4]=.69f;plain[i*4+1]=.74f;plain[i*4+2]=.8f;plain[i*4+3]=1;}
         check(difference(plain,render(spatial,plain,sky,matrix,camera,1,1,5))<.00001,"sky stays open and color is preserved");
@@ -130,7 +138,7 @@ public final class SpatialShaderProbe {
             System.out.println("Minimum field Jacobian fov="+fov+" yaw="+yaw+": "+jacobian);
             check(jacobian>.05,"unfolded view fov="+fov+" yaw="+yaw);
         }
-        for(var moved:new Vector3f[]{new Vector3f(60,0,60),new Vector3f(250,64,-120)}) {
+        for(var moved:new Vector3f[]{new Vector3f(60,0,60),new Vector3f(250,64,-120),new Vector3f(800,0,0),new Vector3f(10000,0,0)}) {
             var view=projection(70,35,-12,moved);
             float[] pixels=render(spatial,colors,plane(view,100),view,moved,1,1,5);
             double jacobian=minJacobian(pixels);
@@ -139,7 +147,8 @@ public final class SpatialShaderProbe {
             maximumDisplacement=Math.max(maximumDisplacement,maxDisplacement(colors,pixels));
         }
         System.out.println("Maximum displacement across tested views: "+maximumDisplacement+" pixels");
-        check(maximumDisplacement<=H*.013,"refraction stays below 1.3 percent of viewport height across tested views");
+        check(maximumDisplacement<=H*.121,"extreme distance respects the existing viewport displacement bound");
+        check(maxDisplacement(colors,render(spatial,colors,plane(matrix,64),matrix,camera,1,1,5))<=H*.013,"64-block entry neighborhood retains the subtle base strength");
         glBindTexture(GL_TEXTURE_2D,color);
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
         for(int i=0;i<4;i++) {
@@ -159,18 +168,74 @@ public final class SpatialShaderProbe {
 
     private float[] render(int program,float[] rgba,float[] depths,Matrix4f matrix,Vector3f camera,float progress,float strength,float elapsed) {
         upload(color,GL_RGBA,rgba);upload(depth,GL_RED,depths);
+        if(program==spatialProgram)prepareField(matrix,camera);
         glUseProgram(program);
-        int[] textures={color,depth,edges};String[] names={"DiffuseSampler","DepthSampler","EdgeSampler"};
-        for(int i=0;i<3;i++){glActiveTexture(GL_TEXTURE0+i);glBindTexture(GL_TEXTURE_2D,textures[i]);glUniform1i(glGetUniformLocation(program,names[i]),i);}
+        int[] textures={color,depth,edges,radial};String[] names={"DiffuseSampler","DepthSampler","EdgeSampler","StrengthSampler"};
+        for(int i=0;i<textures.length;i++){glActiveTexture(GL_TEXTURE0+i);glBindTexture(GL_TEXTURE_2D,textures[i]);glUniform1i(glGetUniformLocation(program,names[i]),i);}
         glUniform2f(glGetUniformLocation(program,"InSize"),W,H);
         glUniformMatrix4fv(glGetUniformLocation(program,"InverseViewProjection"),false,matrix.invert(new Matrix4f()).get(new float[16]));
         glUniformMatrix4fv(glGetUniformLocation(program,"ViewProjection"),false,matrix.get(new float[16]));
         glUniform3f(glGetUniformLocation(program,"CameraFromOrigin"),camera.x,camera.y,camera.z);
         uniform(program,"ScanProgress",progress);uniform(program,"ScanRadius",progress*progress*256);
         uniform(program,"ScanRange",256);uniform(program,"DistortionStrength",strength);uniform(program,"Elapsed",elapsed);
-        glBindFramebuffer(GL_FRAMEBUFFER,framebuffer);glViewport(0,0,W,H);glDisable(GL_DEPTH_TEST);glDisable(GL_BLEND);
+        glBindFramebuffer(GL_FRAMEBUFFER,framebuffer);glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,target,0);
+        glViewport(0,0,W,H);glDisable(GL_DEPTH_TEST);glDisable(GL_BLEND);
         glDrawArrays(GL_TRIANGLES,0,3);
         float[] pixels=new float[W*H*4];glReadPixels(0,0,W,H,GL_RGBA,GL_FLOAT,pixels);return pixels;
+    }
+
+    private void prepareField(Matrix4f matrix,Vector3f camera) {
+        glBindFramebuffer(GL_FRAMEBUFFER,framebuffer);glViewport(0,0,FW,FH);glDisable(GL_DEPTH_TEST);glDisable(GL_BLEND);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,radial,0);
+        glUseProgram(distanceProgram);glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,depth);
+        glUniform1i(glGetUniformLocation(distanceProgram,"DepthSampler"),1);
+        glUniform2f(glGetUniformLocation(distanceProgram,"OutSize"),FW,FH);
+        glUniformMatrix4fv(glGetUniformLocation(distanceProgram,"InverseViewProjection"),false,matrix.invert(new Matrix4f()).get(new float[16]));
+        glUniform3f(glGetUniformLocation(distanceProgram,"CameraFromOrigin"),camera.x,camera.y,camera.z);
+        uniform(distanceProgram,"ScanRange",256);glDrawArrays(GL_TRIANGLES,0,3);
+        glUseProgram(blurProgram);glUniform2f(glGetUniformLocation(blurProgram,"InSize"),FW,FH);
+        glUniform1i(glGetUniformLocation(blurProgram,"DiffuseSampler"),0);glActiveTexture(GL_TEXTURE0);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,radialSwap,0);
+        glBindTexture(GL_TEXTURE_2D,radial);glUniform2f(glGetUniformLocation(blurProgram,"Direction"),1,0);glDrawArrays(GL_TRIANGLES,0,3);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,radial,0);
+        glBindTexture(GL_TEXTURE_2D,radialSwap);glUniform2f(glGetUniformLocation(blurProgram,"Direction"),0,1);glDrawArrays(GL_TRIANGLES,0,3);
+    }
+    private double radialMean(Matrix4f matrix,Vector3f camera,float[] depths) {
+        upload(depth,GL_RED,depths);prepareField(matrix,camera);
+        float[] data=new float[FW*FH*4];glReadPixels(0,0,FW,FH,GL_RGBA,GL_FLOAT,data);
+        double mean=0;for(int i=0;i<data.length;i+=4)mean+=data[i]*16;return mean/(FW*FH);
+    }
+    private void checkRadialCurve() {
+        var matrix=projection(70,0,0,new Vector3f());var origin=new Vector3f();
+        double a=radialMean(matrix,origin,plane(matrix,16)),b=radialMean(matrix,origin,plane(matrix,32));
+        double c=radialMean(matrix,origin,plane(matrix,64)),d=radialMean(matrix,origin,plane(matrix,128));
+        double e=radialMean(matrix,origin,plane(matrix,192)),f=radialMean(matrix,origin,plane(matrix,256));
+        check(a>0 && a<b && b<c && c<d && d<e && e<f,"radial strength increases with scene distance from entry");
+        check((b-a)/16>(c-b)/32,"near-field logarithmic slope decreases");
+        check(Math.abs((e-d)-(f-e))<.09,"far-field equal distance steps have equal linear growth within RGBA8 precision");
+        check(Math.abs(c-1)<.05 && Math.abs(d-1.5)<.06 && Math.abs(f-2.5)<.08,"curve crosses near 64 blocks and preserves the chosen mild scale");
+        var moved=new Vector3f(40,8,30);var view=projection(70,75,18,moved);
+        check(Math.abs(radialMean(view,moved,entrySphere(view,moved,128))-d)<.08,"the same entry-centered radius retains strength after moving and turning");
+        double below=radialMean(matrix,origin,plane(matrix,63)),above=radialMean(matrix,origin,plane(matrix,65));
+        check(Math.abs(above-below)<.13,"log-to-linear boundary has no strength jump");
+        report.append("Radial curve at 16/32/64/128/192/256: ").append(a).append('/').append(b).append('/').append(c).append('/').append(d).append('/').append(e).append('/').append(f).append('\n');
+    }
+    private static float[] entrySphere(Matrix4f matrix,Vector3f camera,float radius) {
+        var inverse=matrix.invert(new Matrix4f());float[] result=new float[W*H];
+        for(int y=0;y<H;y++)for(int x=0;x<W;x++) {
+            var p=inverse.transform(new Vector4f((x+.5f)/W*2-1,(y+.5f)/H*2-1,1,1));
+            var ray=new Vector3f(p.x,p.y,p.z).normalize();float dot=camera.dot(ray);
+            float distance=-dot+(float)Math.sqrt(dot*dot+radius*radius-camera.lengthSquared());
+            p=matrix.transform(new Vector4f(ray.mul(distance),1));result[y*W+x]=p.z/p.w*.5f+.5f;
+        }return result;
+    }
+    private static double maxFieldStep(float[] base,float[] warped) {
+        double max=0;
+        for(int y=0;y<H-1;y++)for(int x=0;x<W-1;x++) {
+            int a=(y*W+x)*4;
+            for(int b:new int[]{a+4,a+W*4})max=Math.max(max,Math.hypot(((warped[b]-base[b])-(warped[a]-base[a]))*W/.7,
+                    ((warped[b+1]-base[b+1])-(warped[a+1]-base[a+1]))*H/.7));
+        }return max;
     }
 
     private static Matrix4f projection(float fov,float yaw,float pitch,Vector3f eye) {
@@ -227,9 +292,10 @@ public final class SpatialShaderProbe {
             colors[i*4]=tone;colors[i*4+1]=tone;colors[i*4+2]=tone;colors[i*4+3]=1;
         }return new float[][]{colors,depths};
     }
-    private static int texture(int internal,int format) {
+    private static int texture(int internal,int format) {return texture(internal,format,W,H);}
+    private static int texture(int internal,int format,int width,int height) {
         int id=glGenTextures();glBindTexture(GL_TEXTURE_2D,id);
-        glTexImage2D(GL_TEXTURE_2D,0,internal,W,H,0,format,GL_FLOAT,0L);
+        glTexImage2D(GL_TEXTURE_2D,0,internal,width,height,0,format,GL_FLOAT,0L);
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);return id;
     }
