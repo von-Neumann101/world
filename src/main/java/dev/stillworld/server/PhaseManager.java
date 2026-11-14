@@ -75,7 +75,6 @@ public final class PhaseManager {
         }
         if (player.connection != null) player.closeContainer();
         player.stopUsingItem();
-        player.setDeltaMovement(Vec3.ZERO);
         var begin = PhaseNetwork.message("begin");
         begin.putUUID("session", session.id); begin.putInt("rank", rank.ordinal());
         begin.putDouble("entryX", session.entry.x); begin.putDouble("entryY", session.entry.y); begin.putDouble("entryZ", session.entry.z);
@@ -117,16 +116,16 @@ public final class PhaseManager {
         }
     }
     private static void safeExit(ServerPlayer player, PhaseSession session) {
-        Vec3 target = player.position();
-        if (!session.level.noCollision(player, player.getBoundingBox())) {
-            Vec3 found = null;
-            search: for (int radius = 1; radius <= 8; radius++) for (int y = 0; y <= radius; y++)
-                for (int x = -radius; x <= radius; x++) for (int z = -radius; z <= radius; z++) {
-                    var delta = new Vec3(x, y, z);
-                    if (session.level.noCollision(player, player.getBoundingBox().move(delta))) { found = target.add(delta); break search; }
-                }
-            target = found == null ? session.entry : found;
-        }
+        // The session has already been removed, so this checks reality's collisions.
+        // An absolute teleport also zeros client velocity, even at the same position.
+        if (session.level.noCollision(player, player.getBoundingBox())) return;
+        Vec3 found = null;
+        search: for (int radius = 1; radius <= 8; radius++) for (int y = 0; y <= radius; y++)
+            for (int x = -radius; x <= radius; x++) for (int z = -radius; z <= radius; z++) {
+                var delta = new Vec3(x, y, z);
+                if (session.level.noCollision(player, player.getBoundingBox().move(delta))) { found = player.position().add(delta); break search; }
+            }
+        Vec3 target = found == null ? session.entry : found;
         player.fallDistance = 0;
         player.setDeltaMovement(Vec3.ZERO);
         if (player.connection != null) player.connection.teleport(target.x, target.y, target.z, player.getYRot(), player.getXRot());
