@@ -1,0 +1,51 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.142'
+}
+version = mod_version
+group = 'dev.stillworld'
+base { archivesName = 'stillworld-1.21.1' }
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.theillusivec4.top/' }
+}
+dependencies {
+    compileOnly "top.theillusivec4.curios:curios-neoforge:${curios_version}:api"
+    runtimeOnly "top.theillusivec4.curios:curios-neoforge:${curios_version}"
+}
+sourceSets {
+    regression { java.srcDirs = ['src/regression/java', 'src/main/java/dev/stillworld/core'] }
+    gameTest {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+}
+neoForge {
+    version = project.neo_version
+    runs {
+        client { client() }
+        server {
+            server()
+            gameDirectory = project.file('run/server')
+            programArgument '--nogui'
+        }
+        gameTestServer {
+            type = 'gameTestServer'
+            sourceSet = sourceSets.gameTest
+            gameDirectory = project.file('run/gametest')
+            systemProperty 'neoforge.enabledGameTestNamespaces', 'stillworld'
+        }
+    }
+    mods { stillworld { sourceSet(sourceSets.main); sourceSet(sourceSets.gameTest) } }
+}
+tasks.register('regressionTest', JavaExec) {
+    group = 'verification'
+    classpath = sourceSets.regression.runtimeClasspath
+    mainClass = 'dev.stillworld.CoreTests'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('test') { dependsOn 'regressionTest' }
+tasks.named('check') { dependsOn 'regressionTest' }
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+tasks.named('jar') { manifest.attributes('Implementation-Version': project.version) }

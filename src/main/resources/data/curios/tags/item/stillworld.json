@@ -1,0 +1,12 @@
+{
+  "replace": false,
+  "values": [
+    "stillworld:rank1_charm",
+    "stillworld:rank2_charm",
+    "stillworld:rank3_charm",
+    "stillworld:rank4_charm",
+    "stillworld:rank4_5_charm",
+    "stillworld:rank5_charm",
+    "stillworld:rank6_charm"
+  ]
+}
