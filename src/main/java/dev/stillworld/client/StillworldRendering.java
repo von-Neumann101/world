@@ -73,11 +73,10 @@ public final class StillworldRendering {
             }
             if (StillworldClient.seeLive()) {
                 for (var entity : mc.level.entitiesForRendering()) {
-                    if (!(entity instanceof LivingEntity) || entity == mc.player || StillworldClient.phased(entity) || !entity.isAlive()) continue;
-                    var locked = StillworldClient.frozenReplacement(entity);
-                    var projection = locked == null ? entity : locked;
-                    if (event.getFrustum().isVisible(projection.getBoundingBox().inflate(.5)))
-                        draw(projection, locked == null ? partial : 1, camera, pose, buffers, 0x48FFFFFF, true);
+                    if (!(entity instanceof LivingEntity) || entity == mc.player || StillworldClient.phased(entity)
+                            || StillworldClient.locked(entity) || !entity.isAlive()) continue;
+                    if (event.getFrustum().isVisible(entity.getBoundingBox().inflate(.5)))
+                        draw(entity, partial, camera, pose, buffers, 0x48FFFFFF, true);
                 }
             }
         } else {
@@ -149,12 +148,18 @@ public final class StillworldRendering {
             MultiBufferSource target = buffers;
             if (tint != -1) {
                 target = original -> {
+                    // Glint reuses the item's full quads with an unrelated opaque texture.
+                    // Its extra pass must not fill the alpha holes of the actual item.
+                    if (original==RenderType.glint() || original==RenderType.glintTranslucent()
+                            || original==RenderType.entityGlint() || original==RenderType.entityGlintDirect()
+                            || original==RenderType.armorEntityGlint()) return DiscardingConsumer.INSTANCE;
                     ResourceLocation texture = WHITE;
-                    if (!silhouette && original instanceof CompositeRenderTypeAccessor composite) {
+                    if (original instanceof CompositeRenderTypeAccessor composite) {
                         var textureState = ((CompositeStateAccessor)(Object)composite.stillworld$state()).stillworld$textureState();
                         texture = ((TextureStateAccessor)textureState).stillworld$texture().orElse(WHITE);
                     }
-                    return new TintedConsumer(buffers.getBuffer(RenderType.entityTranslucent(texture)), tint, silhouette);
+                    var type = silhouette ? SilhouetteRenderType.forTexture(texture) : RenderType.entityTranslucent(texture);
+                    return new TintedConsumer(buffers.getBuffer(type), tint, silhouette);
                 };
             }
             renderer.render(entity, Mth.rotLerp(partial, entity.yRotO, entity.getYRot()), partial, pose, target,
@@ -189,7 +194,17 @@ public final class StillworldRendering {
                 .setOverlay(OverlayTexture.NO_OVERLAY).setLight(LightTexture.FULL_BRIGHT).setNormal(pose.last(), 0,0, reverse ? -1 : 1);
     }
 
-    /** Force alpha on every original layer, including armor and held items. White projections use a plain texture. */
+    private enum DiscardingConsumer implements VertexConsumer {
+        INSTANCE;
+        public VertexConsumer addVertex(float x,float y,float z) { return this; }
+        public VertexConsumer setColor(int r,int g,int b,int a) { return this; }
+        public VertexConsumer setUv(float u,float v) { return this; }
+        public VertexConsumer setUv1(int u,int v) { return this; }
+        public VertexConsumer setUv2(int u,int v) { return this; }
+        public VertexConsumer setNormal(float x,float y,float z) { return this; }
+    }
+
+    /** Apply tint/opacity while preserving each original layer's texture coordinates and cutout. */
     private record TintedConsumer(VertexConsumer delegate, int tint, boolean solid) implements VertexConsumer {
         @Override public VertexConsumer addVertex(float x, float y, float z) { delegate.addVertex(x,y,z); return this; }
         @Override public VertexConsumer setColor(int r, int g, int b, int a) {
@@ -197,7 +212,7 @@ public final class StillworldRendering {
                     solid ? (tint >> 8 & 255) : g * (tint >> 8 & 255) / 255,
                     solid ? (tint & 255) : b * (tint & 255) / 255, a * (tint >>> 24) / 255); return this;
         }
-        @Override public VertexConsumer setUv(float u, float v) { delegate.setUv(solid ? .5f : u, solid ? .5f : v); return this; }
+        @Override public VertexConsumer setUv(float u, float v) { delegate.setUv(u,v); return this; }
         @Override public VertexConsumer setUv1(int u, int v) { delegate.setUv1(0,10); return this; }
         @Override public VertexConsumer setUv2(int u, int v) { delegate.setUv2(u,v); return this; }
         @Override public VertexConsumer setNormal(float x, float y, float z) { delegate.setNormal(x,y,z); return this; }

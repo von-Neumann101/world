@@ -41,6 +41,7 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.RenderLivingEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import top.theillusivec4.curios.api.CuriosApi;
 import java.nio.file.Files;
@@ -70,7 +71,8 @@ public final class ClientVisualSmoke {
     private boolean finished, sent;
     private volatile boolean serverDone;
     private volatile Throwable serverFailure;
-    private UUID cowId, pigId;
+    private UUID cowId, pigId, skeletonId;
+    private int markedProjectionFrames;
     private CompoundTag frozenModel;
     private long frozenTime;
     private int ghostTick, liveTick;
@@ -81,6 +83,7 @@ public final class ClientVisualSmoke {
             try { Files.createDirectories(output); Files.writeString(output.resolve("result.txt"),"RUNNING: waiting for StillworldSmoke\n"); }
             catch (Exception exception) { throw new IllegalStateException("Cannot create the visual test report",exception); }
             NeoForge.EVENT_BUS.addListener(this::tick);
+            NeoForge.EVENT_BUS.addListener(this::livingRendered);
         }
     }
 
@@ -136,6 +139,7 @@ public final class ClientVisualSmoke {
                     var ownPose=ClientPose.capture(mc.player);
                     onServer(p->{
                         p.serverLevel().getEntity(cowId).setPos(COW.add(2,0,1));p.serverLevel().setBlockAndUpdate(REAL_CHANGE,Blocks.DIAMOND_BLOCK.defaultBlockState());
+                        p.serverLevel().getEntity(skeletonId).setPos(-1.7,100,3.6);
                         // An additional detached self visual is invisible during phase, but exercises the vanilla player model in isolation.
                         var visual=EntityVisual.capture(p);visual.put("clientPose",ownPose);
                         var data=PhaseNetwork.message("ghost");data.putUUID("session",PhaseManager.get(p).id);data.put("visual",visual);PhaseNetwork.sendState(p,data);
@@ -180,6 +184,9 @@ public final class ClientVisualSmoke {
                         click("key.stillworld.mark");sent=true;
                     }
                     if(!sent || age<25 || live(cowId)==null || !StillworldClient.locked(live(cowId)))return;
+                    require(markedProjectionFrames==0,"Marked creature still rendered an extra white projection over the original snapshot");
+                    require(StillworldClient.ghosts().get(cowId).tickCount==ghostTick
+                            && frozenModel.equals(ClientPose.capture(StillworldClient.ghosts().get(cowId))),"Mark changed the original frozen creature model");
                     require(live(cowId).position().distanceTo(COW)<.05,"Locked live projection remained at the old pre-rewind interpolation position");
                     onServer(p->{var s=PhaseManager.get(p);require(s!=null&&s.marked.containsKey(cowId),"R did not mark the server's original cow");
                         var cow=(LivingEntity)p.serverLevel().getEntity(cowId);require(cow.position().distanceTo(COW)<.01,"Mark did not rewind the same real cow");
@@ -259,6 +266,16 @@ public final class ClientVisualSmoke {
         player.connection.teleport(ENTRY.x,ENTRY.y,ENTRY.z,0,12);player.setHealth(player.getMaxHealth());player.getFoodData().setFoodLevel(20);player.containerMenu.broadcastChanges();
         var cow=EntityType.COW.create(level);require(cow!=null,"Cannot spawn cow");cow.setPos(COW);cow.setNoAi(true);cow.getAttribute(Attributes.MAX_HEALTH).setBaseValue(100);cow.setHealth(100);level.addFreshEntity(cow);cowId=cow.getUUID();
         var pig=EntityType.PIG.create(level);require(pig!=null,"Cannot spawn pig");pig.setPos(-2,100,3.5);pig.setNoAi(true);level.addFreshEntity(pig);pigId=pig.getUUID();
+        var skeleton=EntityType.SKELETON.create(level);require(skeleton!=null,"Cannot spawn skeleton");skeleton.setPos(-3.5,100,6.5);skeleton.setNoAi(true);
+        skeleton.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD,new ItemStack(Items.IRON_HELMET));
+        skeleton.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,new ItemStack(Items.BOW));
+        skeleton.setItemSlot(net.minecraft.world.entity.EquipmentSlot.OFFHAND,new ItemStack(Items.TORCH));
+        level.addFreshEntity(skeleton);skeletonId=skeleton.getUUID();
+    }
+    private void livingRendered(RenderLivingEvent.Pre<?,?> event) {
+        var entity=event.getEntity();
+        if(cowId!=null&&entity.getUUID().equals(cowId)&&StillworldClient.active()&&StillworldRendering.visualPass()
+                &&StillworldClient.locked(entity)&&entity!=StillworldClient.ghosts().get(cowId))markedProjectionFrames++;
     }
     private void onServer(Consumer<ServerPlayer> action) {
         var mc=Minecraft.getInstance();serverDone=false;var id=mc.player.getUUID();

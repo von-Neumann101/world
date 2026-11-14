@@ -143,7 +143,6 @@ public final class PhaseSkills {
         var snapshot=new EntitySnapshot(s.actors.get(id));snapshot.restoreAndFreeze(target);s.marked.put(id,snapshot);LOCKS.put(id,s);
         s.level.getChunkSource().addRegionTicket(MARK_TICKET,new ChunkPos(BlockPos.containing(snapshot.position)),2,id);
         var data=PhaseNetwork.message("freeze");data.putUUID("uuid",id);data.put("visual",snapshot.visual);broadcast(s.level,data);
-        var ledger=PhaseNetwork.message("ledger");ledger.putUUID("session",s.id);ledger.putUUID("uuid",id);ledger.putFloat("total",0);PhaseNetwork.sendState(s.player,ledger);
         return true;
     }
     public static boolean attack(PhaseSession s,UUID id) {
@@ -159,7 +158,7 @@ public final class PhaseSkills {
         if(!Float.isFinite(damage)||damage<=0)return false;
         boolean accepted;
         if(s.rank.defersDamage()) {
-            s.damage.add(id,damage);var data=PhaseNetwork.message("ledger");data.putUUID("session",s.id);data.putUUID("uuid",id);data.putFloat("total",s.damage.accumulated(id)*1.6f);PhaseNetwork.sendState(player,data);accepted=true;
+            s.damage.add(id,damage);accepted=true;
         } else accepted=target.hurt(source,damage*0.8f);
         if(accepted&&!weapon.isEmpty()&&!player.isCreative()) {
             // The phase permits damage recording, not arbitrary real-world hit

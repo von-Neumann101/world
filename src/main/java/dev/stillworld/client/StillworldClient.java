@@ -60,7 +60,6 @@ public final class StillworldClient {
     private static final Map<UUID, Entity> ENTRY_ANIMATIONS = new HashMap<>();
     private static final Set<UUID> PHASED = new HashSet<>();
     private static final Set<UUID> DEAD = new HashSet<>();
-    private static final Map<UUID, Float> LEDGER = new LinkedHashMap<>();
     private static final List<StillworldRendering.Slash> SLASHES = new ArrayList<>();
     private static final Set<BlockPos> PLACED = new HashSet<>();
     private static BlockPos breaking;
@@ -75,6 +74,7 @@ public final class StillworldClient {
     public StillworldClient(IEventBus modBus) {
         modBus.addListener(StillworldClient::keys);
         modBus.addListener(StillworldClient::setup);
+        modBus.addListener(SilhouetteRenderType::registerShaders);
         NeoForge.EVENT_BUS.addListener(StillworldClient::tick);
         NeoForge.EVENT_BUS.addListener(StillworldClient::interaction);
         NeoForge.EVENT_BUS.addListener(StillworldClient::hud);
@@ -182,8 +182,7 @@ public final class StillworldClient {
                             if (tag.getBoolean("placed")) PLACED.add(pos); else PLACED.remove(pos);
                         }
                     }
-                    case "dead" -> { var uuid = tag.getUUID("uuid"); DEAD.add(uuid); LEDGER.remove(uuid); }
-                    case "ledger" -> LEDGER.put(tag.getUUID("uuid"), tag.getFloat("total"));
+                    case "dead" -> DEAD.add(tag.getUUID("uuid"));
                     case "slash" -> SLASHES.add(new StillworldRendering.Slash(new Vec3(tag.getDouble("cx"), tag.getDouble("cy"), tag.getDouble("cz")), tag.getFloat("yaw"), tag.getFloat("pitch")));
                     default -> { }
                 }
@@ -267,7 +266,7 @@ public final class StillworldClient {
         clearSession(); LOCKED.clear(); PHASED.clear(); knownLevel = null;
     }
     private static void clearSession() {
-        session = null; rank = null; GHOSTS.clear(); ENTRY_ANIMATIONS.clear(); DEAD.clear(); LEDGER.clear(); SLASHES.clear(); PLACED.clear();
+        session = null; rank = null; GHOSTS.clear(); ENTRY_ANIMATIONS.clear(); DEAD.clear(); SLASHES.clear(); PLACED.clear();
         breaking = null; breakingTicks = 0; attackDelay = useDelay = 0;
         var mc = Minecraft.getInstance();
         StillworldRendering.clear();
@@ -414,23 +413,9 @@ public final class StillworldClient {
             gui.drawString(mc.font, Component.translatableWithFallback("hud.stillworld.enter", "%s to enter", TOGGLE.getTranslatedKeyMessage()), 8, 20, 0xFFDDDDDD);
             return;
         }
-        gui.drawString(mc.font, Component.translatableWithFallback("hud.stillworld.status", "%s to leave · Marked: %s", TOGGLE.getTranslatedKeyMessage(), LEDGER.size()), 8, 20, 0xFFDDDDDD);
-        int y = 32;
+        gui.drawString(mc.font, Component.translatableWithFallback("hud.stillworld.status", "%s to leave", TOGGLE.getTranslatedKeyMessage()), 8, 20, 0xFFDDDDDD);
         if (rank.canSlash()) {
-            gui.drawString(mc.font, Component.translatableWithFallback("hud.stillworld.slashes", "Slashes: %s", SLASHES.size()), 8, y, 0xFFDDDDDD);
-            y += 12;
-        }
-        for (var entry : LEDGER.entrySet()) {
-            var entity = GHOSTS.get(entry.getKey());
-            String name = entity == null ? "?" : entity.getName().getString();
-            gui.drawString(mc.font, Component.translatableWithFallback("hud.stillworld.ledger", "%s · Pending damage: %s", name,
-                    String.format(Locale.ROOT, "%.1f", entry.getValue())), 8, y, 0xFFEEEEEE);
-            if ((y += 12) > 128) break;
-        }
-        var target = pick(event.getPartialTick().getGameTimeDeltaPartialTick(false));
-        if (target instanceof EntityHitResult entity) {
-            gui.drawString(mc.font, Component.translatableWithFallback("hud.stillworld.target", "%s · %s to mark", entity.getEntity().getName(), MARK.getTranslatedKeyMessage()),
-                    gui.guiWidth() / 2 + 8, gui.guiHeight() / 2 + 8, 0xFFFFFFFF);
+            gui.drawString(mc.font, Component.translatableWithFallback("hud.stillworld.slashes", "Slashes: %s", SLASHES.size()), 8, 32, 0xFFDDDDDD);
         }
     }
 }
