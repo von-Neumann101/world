@@ -47,10 +47,6 @@ public final class StillworldRendering {
     }
 
     public static void render(RenderLevelStageEvent event) {
-        if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_SKY && StillworldClient.active()) {
-            SkySeaRenderer.render(event);
-            return;
-        }
         if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_PARTICLES && StillworldClient.active() && Minecraft.useShaderTransparency()) {
             // Fabulous clears main depth when compositing its separate translucent targets.
             // Preserve the opaque world before that composite, while leaving its active target intact.

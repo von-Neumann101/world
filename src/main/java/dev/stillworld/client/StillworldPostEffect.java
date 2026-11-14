@@ -28,7 +28,6 @@ public final class StillworldPostEffect {
     static void begin(Vec3 position) { clear(); origin=position; }
     public static boolean loaded() { return chain!=null; }
     public static boolean settled() { return loaded() && progress>=1; }
-    static float elapsedSeconds() { return started==0?0:(System.nanoTime()-started)/1_000_000_000f; }
 
     static void render(RenderLevelStageEvent event) {
         var mc=Minecraft.getInstance();
