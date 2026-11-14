@@ -16,6 +16,8 @@ import top.theillusivec4.curios.api.CuriosApi;
 import java.util.UUID;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 
 @GameTestHolder(Stillworld.ID)
 @PrefixGameTestTemplate(false)
@@ -55,5 +57,14 @@ public final class SessionGameTests {
         h.assertTrue(p.getX() - start < 0.3, "server movement must collide with the frozen wall removed from reality");
         h.assertTrue(!p.canBeSeenByAnyone(), "a phased player must fail normal mob visibility checks");
         PhaseManager.exit(p); h.succeed();
+    }
+    @GameTest(template = "empty") public static void wardenCannotSenseOrKeepTarget(GameTestHelper h) {
+        var p=player(h);equip(p,Rank.RANK1);
+        var warden=h.spawn(EntityType.WARDEN,new BlockPos(6,2,3));
+        warden.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET,p);
+        PhaseManager.enter(p);
+        h.assertTrue(!warden.canTargetEntity(p),"warden sniff and anger must reject phased players");
+        h.assertTrue(!warden.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET),"entry clears the warden brain attack target");
+        PhaseManager.exit(p);h.succeed();
     }
 }

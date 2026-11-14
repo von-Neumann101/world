@@ -64,6 +64,15 @@ public final class PhaseManager {
             if (entity instanceof Mob mob && mob.getTarget() == player) mob.setTarget(null);
         }
         SESSIONS.put(player.getUUID(), session);
+        for(var entity:session.level.getAllEntities())if(entity instanceof Mob mob) {
+            var brain=mob.getBrain();
+            if(brain.isMemoryValue(net.minecraft.world.entity.ai.memory.MemoryModuleType.ATTACK_TARGET,player)) {
+                brain.eraseMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.ATTACK_TARGET);
+                brain.eraseMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.WALK_TARGET);
+                brain.eraseMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.LOOK_TARGET);
+                mob.getNavigation().stop();
+            }
+        }
         if (player.connection != null) player.closeContainer();
         player.stopUsingItem();
         player.setDeltaMovement(Vec3.ZERO);

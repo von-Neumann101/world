@@ -18,6 +18,12 @@ public final class PhaseSession {
     public final Map<UUID, CompoundTag> actors = new LinkedHashMap<>();
     public final Set<UUID> laterEntities = new HashSet<>();
     public final DamageLedger damage = new DamageLedger();
+    public final Map<net.minecraft.core.BlockPos,net.minecraft.world.level.block.state.BlockState> placedBefore = new LinkedHashMap<>();
+    public final Map<UUID,EntitySnapshot> marked = new LinkedHashMap<>();
+    public final Set<UUID> dead = new HashSet<>();
+    public final List<dev.stillworld.core.Slash> slashes = new ArrayList<>();
+    public net.minecraft.core.BlockPos mining;
+    public float miningProgress;
     private final SnapshotWorld snapshot;
     public boolean finishing;
     public PhaseSession(ServerPlayer player, Rank rank) {

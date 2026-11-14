@@ -20,14 +20,44 @@ sourceSets {
         compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
         runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
     }
-}
-if (providers.gradleProperty('commonOnly').isPresent()) {
-    sourceSets.main.java.exclude 'dev/stillworld/client/**', 'dev/stillworld/mixin/client/**'
+    visualTest {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+    multiplayerTest {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
 }
 neoForge {
     version = project.neo_version
     runs {
         client { client() }
+        visualClient {
+            client()
+            sourceSet = sourceSets.visualTest
+            gameDirectory = project.file('run')
+            programArgument '--quickPlaySingleplayer'
+            programArgument 'StillworldSmoke'
+            systemProperty 'stillworld.visualTest.auto', 'true'
+            systemProperty 'stillworld.visualTest.output', project.file('docs/verification/screenshots').absolutePath
+        }
+        multiplayerHost {
+            client()
+            sourceSet = sourceSets.multiplayerTest
+            gameDirectory = project.file('run/multiplayer-host')
+            programArguments.addAll('--username', 'PhaseHost', '--quickPlaySingleplayer', 'StillworldMultiplayerSmoke')
+            systemProperty 'stillworld.multi.role', 'host'
+            systemProperty 'stillworld.multi.evidence', project.file('run/multiplayer-evidence').absolutePath
+        }
+        multiplayerObserver {
+            client()
+            sourceSet = sourceSets.multiplayerTest
+            gameDirectory = project.file('run/multiplayer-observer')
+            programArguments.addAll('--username', 'Observer', '--quickPlayMultiplayer', 'localhost:25588')
+            systemProperty 'stillworld.multi.role', 'observer'
+            systemProperty 'stillworld.multi.evidence', project.file('run/multiplayer-evidence').absolutePath
+        }
         server {
             server()
             gameDirectory = project.file('run/server')
@@ -40,7 +70,14 @@ neoForge {
             systemProperty 'neoforge.enabledGameTestNamespaces', 'stillworld'
         }
     }
-    mods { stillworld { sourceSet(sourceSets.main); sourceSet(sourceSets.gameTest) } }
+    mods {
+        stillworld {
+            sourceSet(sourceSets.main)
+            sourceSet(sourceSets.gameTest)
+            if (providers.gradleProperty('visualTest').isPresent()) sourceSet(sourceSets.visualTest)
+            if (providers.gradleProperty('multiplayerTest').isPresent()) sourceSet(sourceSets.multiplayerTest)
+        }
+    }
 }
 tasks.register('regressionTest', JavaExec) {
     group = 'verification'

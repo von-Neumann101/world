@@ -9,5 +9,22 @@
   "item.stillworld.rank4_charm": "寂界之印 · rank4",
   "item.stillworld.rank4_5_charm": "寂界之印 · rank4.5",
   "item.stillworld.rank5_charm": "寂界之印 · rank5",
-  "item.stillworld.rank6_charm": "寂界之印 · rank6"
+  "item.stillworld.rank6_charm": "寂界之印 · rank6",
+  "key.categories.stillworld": "寂界",
+  "key.stillworld.toggle": "进入或退出寂界",
+  "key.stillworld.mark": "标记冻结生物",
+  "hud.stillworld.inside": "寂界 · rank%s",
+  "hud.stillworld.outside": "现实 · rank%s",
+  "hud.stillworld.enter": "%s 进入寂界",
+  "hud.stillworld.status": "%s 退出 · 已标记：%s",
+  "hud.stillworld.slashes": "静止斩击：%s",
+  "hud.stillworld.ledger": "%s · 待结算伤害：%s",
+  "hud.stillworld.target": "%s · %s 标记",
+  "block.stillworld.black_mist": "黑色迷雾",
+  "block.stillworld.gray_mist": "灰色迷雾",
+  "message.stillworld.need_charm": "请先在寂界饰品栏佩戴寂界之印。",
+  "message.stillworld.changed_block": "现实中的方块已改变，无法按旧快照破坏。",
+  "message.stillworld.already_marked": "此生物正在被另一位玩家标记。",
+  "message.stillworld.linked_target": "此目标需要关联状态回退，该部分将在后续版本实现。",
+  "message.stillworld.slash_limit": "本次寂界已留下 16 道斩击。"
 }

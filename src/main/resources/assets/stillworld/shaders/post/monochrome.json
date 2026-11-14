@@ -1,0 +1,7 @@
+{
+  "targets": ["stillworld_swap"],
+  "passes": [
+    {"name": "stillworld:monochrome", "intarget": "minecraft:main", "outtarget": "stillworld_swap"},
+    {"name": "blit", "intarget": "stillworld_swap", "outtarget": "minecraft:main"}
+  ]
+}

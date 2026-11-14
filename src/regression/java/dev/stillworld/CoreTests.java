@@ -25,6 +25,7 @@ public final class CoreTests {
         ledger.add(a, 5); ledger.discard(a);
         close(ledger.drain(a), 0, "dead targets lose pending damage");
         System.out.println("PASS " + checks + " core behavior checks");
+        SlashTests.main(args);
     }
     private static void check(boolean condition, String message) {
         checks++;

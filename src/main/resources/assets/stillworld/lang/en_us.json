@@ -9,5 +9,22 @@
   "item.stillworld.rank4_charm": "Stillworld Sigil · rank4",
   "item.stillworld.rank4_5_charm": "Stillworld Sigil · rank4.5",
   "item.stillworld.rank5_charm": "Stillworld Sigil · rank5",
-  "item.stillworld.rank6_charm": "Stillworld Sigil · rank6"
+  "item.stillworld.rank6_charm": "Stillworld Sigil · rank6",
+  "key.categories.stillworld": "Stillworld",
+  "key.stillworld.toggle": "Enter or leave Stillworld",
+  "key.stillworld.mark": "Mark frozen creature",
+  "hud.stillworld.inside": "Stillworld · Rank %s",
+  "hud.stillworld.outside": "Reality · Rank %s",
+  "hud.stillworld.enter": "%s to enter",
+  "hud.stillworld.status": "%s to leave · Marked: %s",
+  "hud.stillworld.slashes": "Slashes: %s",
+  "hud.stillworld.ledger": "%s · Pending damage: %s",
+  "hud.stillworld.target": "%s · %s to mark",
+  "block.stillworld.black_mist": "Black Mist",
+  "block.stillworld.gray_mist": "Gray Mist",
+  "message.stillworld.need_charm": "Equip a Stillworld Sigil in the Stillworld slot first.",
+  "message.stillworld.changed_block": "This block changed in reality; the old snapshot cannot break it.",
+  "message.stillworld.already_marked": "Another player has already marked this creature.",
+  "message.stillworld.linked_target": "This target requires linked-state rollback, planned for a later version.",
+  "message.stillworld.slash_limit": "This session already contains 16 slashes."
 }

@@ -14,6 +14,9 @@ import java.util.EnumMap;
 import java.util.Map;
 
 public final class ModContent {
+    public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(Stillworld.ID);
+    public static final net.neoforged.neoforge.registries.DeferredBlock<dev.stillworld.block.MistBlock> BLACK_MIST = BLOCKS.register("black_mist", () -> new dev.stillworld.block.MistBlock(true));
+    public static final net.neoforged.neoforge.registries.DeferredBlock<dev.stillworld.block.MistBlock> GRAY_MIST = BLOCKS.register("gray_mist", () -> new dev.stillworld.block.MistBlock(false));
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(Stillworld.ID);
     public static final Map<Rank, DeferredItem<PhaseCharmItem>> CHARMS = new EnumMap<>(Rank.class);
     public static final DeferredItem<SwordItem> BLADE = ITEMS.register("stillworld_blade", () -> new SwordItem(Tiers.NETHERITE,
@@ -29,7 +32,7 @@ public final class ModContent {
                 .icon(() -> CHARMS.get(Rank.RANK1).get().getDefaultInstance())
                 .displayItems((parameters, output) -> { CHARMS.values().forEach(output::accept); output.accept(BLADE); }).build());
     }
-    public static void register(IEventBus bus) { ITEMS.register(bus); TABS.register(bus); }
+    public static void register(IEventBus bus) { BLOCKS.register(bus); ITEMS.register(bus); TABS.register(bus); }
     public static Rank equippedRank(Player player) {
         var inventory = CuriosApi.getCuriosInventory(player);
         if (inventory.isEmpty()) return null;

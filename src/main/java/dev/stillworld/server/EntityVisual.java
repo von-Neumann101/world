@@ -1,8 +1,10 @@
 package dev.stillworld.server;
+import dev.stillworld.mixin.CreeperSnapshotAccessor;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.player.Player;
 
 public final class EntityVisual {
@@ -16,6 +18,7 @@ public final class EntityVisual {
         saved.remove("Passengers");
         result.put("entity", saved);
         result.putInt("tick", entity.tickCount);
+        result.putFloat("width",entity.getBbWidth());result.putFloat("height",entity.getBbHeight());
         result.putString("pose", entity.getPose().name());
         if (entity instanceof Player player) {
             var publicData = new CompoundTag();
@@ -35,6 +38,7 @@ public final class EntityVisual {
             result.putString("name", player.getGameProfile().getName());
         }
         if (entity instanceof LivingEntity living) {
+            if(entity instanceof net.minecraft.world.entity.Mob mob) result.putBoolean("aggressive",mob.isAggressive());
             result.putFloat("bodyYaw", living.yBodyRot);
             result.putFloat("headYaw", living.yHeadRot);
             result.putFloat("attack", living.attackAnim);
@@ -42,6 +46,18 @@ public final class EntityVisual {
             result.putInt("death", living.deathTime);
             result.putFloat("walkPosition", living.walkAnimation.position());
             result.putFloat("walkSpeed", living.walkAnimation.speed());
+        }
+        if (entity instanceof Creeper creeper) {
+            var access = (CreeperSnapshotAccessor) creeper;
+            var fuse = new CompoundTag();
+            fuse.putInt("swell", access.stillworld$swell());
+            fuse.putInt("oldSwell", access.stillworld$oldSwell());
+            fuse.putInt("maxSwell", access.stillworld$maxSwell());
+            fuse.putInt("explosionRadius", access.stillworld$explosionRadius());
+            fuse.putInt("swellDir", creeper.getSwellDir());
+            fuse.putBoolean("ignited", creeper.isIgnited());
+            fuse.putBoolean("powered", creeper.isPowered());
+            result.put("creeper", fuse);
         }
         return result;
     }

@@ -23,6 +23,7 @@ public final class SnapshotWorld implements BlockGetter {
     private final ServerLevel level;
     private final Map<Long, ChunkSnapshot> chunks = new HashMap<>();
     public SnapshotWorld(ServerLevel level) { this.level = level; }
+    public ServerLevel level() { return level; }
     public void capture(LevelChunk chunk) {
         chunks.computeIfAbsent(chunk.getPos().toLong(), ignored -> new ChunkSnapshot(level, chunk));
     }
