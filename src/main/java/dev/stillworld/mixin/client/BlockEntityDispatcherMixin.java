@@ -7,5 +7,5 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 @Mixin(BlockEntityRenderDispatcher.class)
 public abstract class BlockEntityDispatcherMixin {
     @ModifyVariable(method = "render", at = @At("HEAD"), argsOnly = true, ordinal = 0)
-    private float stillworld$frozenBlockEntityInterpolation(float partial) { return StillworldClient.active() ? 1 : partial; }
+    private float stillworld$frozenBlockEntityInterpolation(float partial) { return StillworldClient.active() && !dev.stillworld.client.RealityOrbRenderer.rendering() ? 1 : partial; }
 }

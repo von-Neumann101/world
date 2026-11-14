@@ -41,12 +41,15 @@ public final class StillworldRendering {
     /** Cancel at the dispatcher before renderer layers, names, shadows, or debug hitboxes run. */
     public static boolean hideOriginal(Entity entity) {
         if (renderingVisual) return false;
+        if (RealityOrbRenderer.rendering()) return StillworldClient.phased(entity) || StillworldClient.locked(entity);
         var mc = Minecraft.getInstance();
         if (entity == mc.player) return StillworldClient.phased(entity);
         return StillworldClient.phased(entity) || StillworldClient.locked(entity) || StillworldClient.active();
     }
 
     public static void render(RenderLevelStageEvent event) {
+        boolean reality=RealityOrbRenderer.rendering();
+        if(reality && event.getStage()!=RenderLevelStageEvent.Stage.AFTER_ENTITIES)return;
         if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_PARTICLES && StillworldClient.active() && Minecraft.useShaderTransparency()) {
             // Fabulous clears main depth when compositing its separate translucent targets.
             // Preserve the opaque world before that composite, while leaving its active target intact.
@@ -64,6 +67,7 @@ public final class StillworldRendering {
             worldPartial = event.getPartialTick().getGameTimeDeltaPartialTick(false);
             StillworldPostEffect.render(event);
             afterPostEffect(event);
+            RealityOrbRenderer.render(event);
             StillworldPostEffect.renderSpatial();
             return;
         }
@@ -74,7 +78,7 @@ public final class StillworldRendering {
         var buffers = mc.renderBuffers().bufferSource();
         var pose = event.getPoseStack();
         float partial = event.getPartialTick().getGameTimeDeltaPartialTick(false);
-        if (StillworldClient.active()) {
+        if (StillworldClient.active() && !reality) {
             for (var ghost : StillworldClient.ghosts().values()) {
                 if (StillworldClient.isDead(ghost.getUUID()) || StillworldClient.phased(ghost)) continue;
                 if (event.getFrustum().isVisible(ghost.getBoundingBox().inflate(.5))) draw(ghost, 1, camera, pose, buffers, -1, false);
@@ -86,7 +90,7 @@ public final class StillworldRendering {
                     draw(clone, 1, camera, pose, buffers, -1, false);
             }
         }
-        if (!StillworldClient.active()) renderPhasedPlayers(pose, buffers, camera, partial);
+        if (!StillworldClient.active() || reality) renderPhasedPlayers(pose, buffers, camera, partial);
         buffers.endBatch();
     }
 

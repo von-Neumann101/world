@@ -57,7 +57,7 @@ import java.util.function.Consumer;
 /** Exclusive development source set; no world-writing test code is shipped in the main jar. */
 @Mod(value = Stillworld.ID, dist = Dist.CLIENT)
 public final class ClientVisualSmoke {
-    private enum Step { WORLD, SETUP, BASELINE, ENTER, FROZEN, BE_RELOAD, VISION_RESIZE, VISION_RELOAD, VISION_FABULOUS, MARK, ATTACK, SLASH, MINE_AIM, MINING, PLACE_AIM, PLACING, DEAD, EXIT, RESTORED }
+    private enum Step { WORLD, SETUP, BASELINE, ENTER, FROZEN, ORB_VIEW, ORB_RETURN, BE_RELOAD, VISION_RESIZE, VISION_RELOAD, VISION_FABULOUS, ORB_RELOADED, ORB_DISTANCE, ORB_RESTORED, MARK, ATTACK, SLASH, MINE_AIM, MINING, PLACE_AIM, PLACING, DEAD, EXIT, RESTORED }
     private static final Vec3 ENTRY = new Vec3(.5,100,.5), COW = new Vec3(.5,100,2.9);
     private static final BlockPos MINE = new BlockPos(1,100,2), SUPPORT = new BlockPos(-1,99,2), REAL_CHANGE = new BlockPos(3,100,2);
     private static final BlockPos CHEST=new BlockPos(-3,100,2), ENDER=new BlockPos(-4,100,3), SHULKER=new BlockPos(2,100,5), BOOK=new BlockPos(-3,100,5), BELL=new BlockPos(3,100,5);
@@ -77,6 +77,7 @@ public final class ClientVisualSmoke {
     private long frozenTime;
     private int ghostTick, liveTick;
     private int originalWidth,originalHeight;
+    private int originalRenderDistance;
     private java.util.concurrent.CompletableFuture<Void> reload;
     private net.minecraft.client.GraphicsStatus originalGraphics;
 
@@ -142,6 +143,7 @@ public final class ClientVisualSmoke {
                     checkRadialField();
                     DistanceShaderProbe.check(output);
                     checks.add("Actual shader retained near texture contrast, lifted distant shadows into silver haze at 4/16/40/88/184/512 blocks, and preserved pale sky layering");
+                    require(RealityWorld.level()!=null && RealityWorld.level()!=mc.level,"Live orb world was not independent");
                     ghostTick=ghost.tickCount;liveTick=live(cowId).tickCount;frozenTime=mc.level.getGameTime();frozenModel=ClientPose.capture(ghost);
                     for(var entry:originalBlockEntities.entrySet())require(mc.level.getBlockEntity(entry.getKey())!=entry.getValue(),"Entry did not exercise chunk replacement for "+entry.getKey());
                     blockEntityPose=readBlockEntityPose();
@@ -170,6 +172,11 @@ public final class ClientVisualSmoke {
                     require(mc.level.getGameTime()==frozenTime,"Frozen world time advanced");
                     require(blockEntityPose.equals(readBlockEntityPose()),"Frozen block-entity model progress advanced");
                     require(mc.level.getBlockState(REAL_CHANGE).is(Blocks.RED_WOOL),"A real terrain update leaked into the frozen view");
+                    require(RealityWorld.level().getBlockState(REAL_CHANGE).is(Blocks.DIAMOND_BLOCK),"Realtime block update did not reach the orb world");
+                    require(RealityWorld.level().getGameTime()>frozenTime+20,"Orb world time remained frozen");
+                    require(java.util.stream.StreamSupport.stream(RealityWorld.level().entitiesForRendering().spliterator(),false).anyMatch(e->e==real),"Orb did not expose the actual moving creature");
+                    checkRealityPackets();
+                    checks.add("Live orb world updated its block/time/creature while the gameplay snapshot stayed frozen");
                     for(var entity:mc.level.entitiesForRendering())require(entity!=ghost,"A visual clone was registered as a real level entity");
                     var playerVisual=(AbstractClientPlayer)StillworldClient.ghosts().get(mc.player.getUUID());
                     require(playerVisual!=null&&playerVisual.swingingArm==InteractionHand.OFF_HAND,"Frozen player lost the recorded off-hand swing side");
@@ -181,12 +188,28 @@ public final class ClientVisualSmoke {
                     checks.add("Player off-hand pose survived capture and thirty vanilla Elytra render-model updates preserved its recorded wing angles");
                     checks.add("Snapshot model/time/terrain froze while live entity ticks and positions continued independently");
                     shot("03-live-white-projection.png");
+                    onServer(p->{
+                        for(int x=-1;x<=1;x++)for(int y=100;y<=102;y++)p.serverLevel().setBlockAndUpdate(new BlockPos(x,y,4),Blocks.CYAN_CONCRETE.defaultBlockState());
+                        p.connection.teleport(ENTRY.x,ENTRY.y,ENTRY.z-6,0,0);
+                    });
+                    advance(Step.ORB_VIEW);
+                }
+                case ORB_VIEW -> {
+                    aim(ENTRY.add(0,1,0));
+                    if(!serverDone||age<100)return;
+                    checkOrb("orb-fancy.png");checkRadialField();
+                    onServer(p->p.connection.teleport(ENTRY.x,ENTRY.y,ENTRY.z,0,0));advance(Step.ORB_RETURN);
+                }
+                case ORB_RETURN -> {
+                    if(!serverDone||age<25)return;
+                    aim(COW.add(0,.85,0));
                     mc.level.getChunkSource().drop(new ChunkPos(-1,0));
                     onServer(p->{var snapshot=PhaseManager.get(p).snapshot().chunk(-1,0);require(snapshot!=null,"Missing saved chunk for unload/reload smoke check");p.connection.send(snapshot.packet());});
                     advance(Step.BE_RELOAD);
                 }
                 case BE_RELOAD -> {
                     if(!serverDone)return;
+                    require(RealityWorld.level().getBlockState(REAL_CHANGE).is(Blocks.DIAMOND_BLOCK),"Snapshot reload poisoned the live orb terrain");
                     if(!sent&&age>=15){require(blockEntityPose.equals(readBlockEntityPose()),"Unloading/reloading a saved chunk replaced frozen BE progress with defaults");aim(new Vec3(-2.5,100.8,3.5));sent=true;}
                     if(!sent||age<30)return;
                     shot("07-frozen-block-entities.png");checks.add("Chest/ender/shulker/book/bell progress survived initial chunk replacement, stayed frozen, and survived actual chunk unload/reload");
@@ -222,8 +245,28 @@ public final class ClientVisualSmoke {
                     checkRadialField();
                     checkLinework();shot("10-linework-fabulous.png");
                     checks.add("Fabulous transparency composition retained scene depth and sparse structural contours");
+                    onServer(p->p.connection.teleport(ENTRY.x,ENTRY.y,ENTRY.z-6,0,0));advance(Step.ORB_RELOADED);
+                }
+                case ORB_RELOADED -> {
+                    aim(ENTRY.add(0,1,0));
+                    if(!serverDone||age<100)return;
+                    checkOrb("orb-fabulous-reloaded.png");checkRadialField();
+                    originalRenderDistance=mc.options.renderDistance().get();
+                    mc.options.renderDistance().set(originalRenderDistance==8?10:8);mc.levelRenderer.allChanged();
+                    advance(Step.ORB_DISTANCE);
+                }
+                case ORB_DISTANCE -> {
+                    aim(ENTRY.add(0,1,0));if(age<70)return;
+                    checkOrb("orb-fabulous-distance.png");
+                    var translucent=RealityWorld.renderer().getTranslucentTarget();
+                    require(translucent!=null&&translucent.width==RealityOrbRenderer.scene().width
+                            &&translucent.height==RealityOrbRenderer.scene().height,"View-distance change lost half-size Fabulous targets");
+                    mc.options.renderDistance().set(originalRenderDistance);originalRenderDistance=0;
                     mc.options.graphicsMode().set(net.minecraft.client.GraphicsStatus.FANCY);mc.levelRenderer.allChanged();
-                    advance(Step.MARK);
+                    onServer(p->p.connection.teleport(ENTRY.x,ENTRY.y,ENTRY.z,0,0));advance(Step.ORB_RESTORED);
+                }
+                case ORB_RESTORED -> {
+                    aim(COW.add(0,.85,0));if(!serverDone||age<25)return;advance(Step.MARK);
                 }
                 case MARK -> {
                     if(!sent && age>=5){
@@ -280,6 +323,7 @@ public final class ClientVisualSmoke {
                     if(StillworldClient.active()||age<30)return;
                     require(StillworldClient.ghosts().isEmpty(),"Exit retained snapshot entities");
                     require(!StillworldPostEffect.loaded(),"Exit retained the world linework effect");
+                    require(RealityWorld.level()==null && RealityOrbRenderer.center()==null && RealityOrbRenderer.scene()==null,"Exit leaked orb world or graphics targets");
                     require(mc.level.getBlockState(MINE).isAir(),"Permanent mining was restored on exit");
                     require(mc.level.getBlockState(SUPPORT.above()).isAir(),"Temporary placement remained after exit");
                     require(mc.level.getBlockState(REAL_CHANGE).is(Blocks.DIAMOND_BLOCK),"Exit did not restore current real terrain");
@@ -369,6 +413,47 @@ public final class ClientVisualSmoke {
     private static void click(KeyMapping mapping){KeyMapping.click(mapping.getKey());}
     private static Entity live(UUID id){for(var entity:Minecraft.getInstance().level.entitiesForRendering())if(entity.getUUID().equals(id))return entity;return null;}
     private void shot(String name)throws Exception{try(var image=Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())){image.writeToFile(output.resolve(name));}}
+    private void checkRealityPackets() {
+        var level=RealityWorld.level();var id=UUID.randomUUID();
+        var block=new net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(REAL_CHANGE,Blocks.DIAMOND_BLOCK.defaultBlockState());
+        var chunk=new net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket(level.getChunkAt(REAL_CHANGE),level.getLightEngine(),null,null);
+        var time=new net.minecraft.network.protocol.game.ClientboundSetTimePacket(123456,654321,true);
+        for(var packet:List.of(block,chunk,time)) {
+            var buffer=new net.minecraft.network.RegistryFriendlyByteBuf(io.netty.buffer.Unpooled.buffer(),level.registryAccess());
+            try {
+                dev.stillworld.network.RealityPayload.CODEC.encode(buffer,new dev.stillworld.network.RealityPayload(id,packet));
+                var decoded=dev.stillworld.network.RealityPayload.CODEC.decode(buffer);
+                require(decoded.session().equals(id)&&decoded.packet().getClass()==packet.getClass()&&!buffer.isReadable(),"Live packet codec did not round-trip its session/type/body");
+                if(decoded.packet() instanceof net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket b)
+                    require(b.getPos().equals(REAL_CHANGE)&&b.getBlockState().is(Blocks.DIAMOND_BLOCK),"Block palette changed across live packet codec");
+                if(decoded.packet() instanceof net.minecraft.network.protocol.game.ClientboundSetTimePacket t)
+                    require(t.getGameTime()==123456&&t.getDayTime()==654321,"Live time changed across packet codec");
+            } finally {buffer.release();}
+        }
+        RealityWorld.receive(id,new net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket(REAL_CHANGE,Blocks.BEDROCK.defaultBlockState()));
+        require(level.getBlockState(REAL_CHANGE).is(Blocks.DIAMOND_BLOCK),"A stale session packet changed the live mirror");
+        checks.add("Registered live chunk/block/time codecs round-tripped and stale-session updates were ignored");
+    }
+
+    private void checkOrb(String name) throws Exception {
+        require(RealityOrbRenderer.center()!=null && RealityOrbRenderer.center().distanceTo(ENTRY.add(0,1,0))<.001,"Orb moved away from the entry point");
+        require(RealityOrbRenderer.renderedFrames()>5,"Live orb did not render multiple frames");
+        require(!RealityWorld.isMirror(Minecraft.getInstance().level) && !RealityOrbRenderer.rendering(),"Live render context escaped into gameplay");
+        try(var image=Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
+            int color=0;
+            for(int y=image.getHeight()*35/100;y<image.getHeight()*65/100;y++)for(int x=image.getWidth()*43/100;x<image.getWidth()*57/100;x++) {
+                int pixel=image.getPixelRGBA(x,y),r=pixel&255,g=(pixel>>8)&255,b=(pixel>>16)&255;
+                if(Math.max(r,Math.max(g,b))-Math.min(r,Math.min(g,b))>24)color++;
+            }
+            image.writeToFile(output.resolve(name));
+            Files.writeString(output.resolve(name+".txt"),"colorPixels="+color+" renderedFrames="+RealityOrbRenderer.renderedFrames()+"\n");
+            require(color>200,"Orb interior did not show the actual colored live geometry: "+color);
+        }
+        try(var image=Screenshot.takeScreenshot(RealityOrbRenderer.scene())) {image.writeToFile(output.resolve("live-"+name));}
+        finally {Minecraft.getInstance().getMainRenderTarget().bindWrite(true);}
+        checks.add("Entry-anchored orb displayed live color and restored gameplay render state at "+step);
+    }
+
     private void checkRadialField() throws Exception {
         var field=StillworldPostEffect.class.getDeclaredField("spatialChain");field.setAccessible(true);
         var chain=(net.minecraft.client.renderer.PostChain)field.get(null);
@@ -461,6 +546,7 @@ public final class ClientVisualSmoke {
     private static void require(boolean condition,String message){if(!condition)throw new AssertionError(message);}
     private void finish(Throwable failure){
         if(originalGraphics!=null)Minecraft.getInstance().options.graphicsMode().set(originalGraphics);
+        if(originalRenderDistance>0)Minecraft.getInstance().options.renderDistance().set(originalRenderDistance);
         if(finished)return;finished=true;var mc=Minecraft.getInstance();mc.options.keyAttack.setDown(false);mc.options.keyUse.setDown(false);
         try {Files.createDirectories(output);Files.writeString(output.resolve("result.txt"),(failure==null?"PASS":"FAIL at "+step+": "+failure)+"\n"+String.join("\n",checks)+"\n");
             if(failure!=null){shot("failure.png");failure.printStackTrace();}System.out.println("STILLWORLD CLIENT SMOKE "+(failure==null?"PASS":"FAIL")+" -> "+output);

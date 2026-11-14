@@ -108,3 +108,18 @@ tasks.register('spatialShaderTest', JavaExec) {
 }
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
 tasks.named('jar') { manifest.attributes('Implementation-Version': project.version) }
+
+// Invisible GLSL test for the spherical live-world compositor.
+tasks.register('orbShaderTest', JavaExec) {
+    group = 'verification'
+    dependsOn 'visualTestClasses'
+    classpath = sourceSets.visualTest.runtimeClasspath
+    mainClass = 'dev.stillworld.client.OrbShaderProbe'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    systemProperty 'java.awt.headless', 'true'
+    systemProperty 'stillworld.automatedClient', 'true'
+    args project.file('src/main/resources/assets/stillworld/shaders/program').absolutePath,
+         project.file("docs/verification/orb-shader-${project.version}").absolutePath,
+         providers.gradleProperty('probeWidth').orElse('640').get(),
+         providers.gradleProperty('probeHeight').orElse('360').get()
+}

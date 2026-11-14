@@ -73,12 +73,14 @@ public final class StillworldClient {
         modBus.addListener(StillworldClient::setup);
         modBus.addListener(SilhouetteRenderType::registerShaders);
         modBus.addListener(StillworldPostEffect::registerReloads);
+        modBus.addListener(RealityOrbRenderer::registerReloads);
         NeoForge.EVENT_BUS.addListener(StillworldClient::tick);
         NeoForge.EVENT_BUS.addListener(StillworldClient::interaction);
         NeoForge.EVENT_BUS.addListener(StillworldClient::hud);
         NeoForge.EVENT_BUS.addListener(StillworldRendering::render);
         NeoForge.EVENT_BUS.addListener(StillworldClient::logout);
         PhaseNetwork.clientHandler = StillworldClient::receive;
+        PhaseNetwork.realityHandler = RealityWorld::receive;
         PhaseNetwork.clientPhased = StillworldClient::phased;
     }
 
@@ -152,7 +154,10 @@ public final class StillworldClient {
                     if (clone != null) { copyAnimation(entity, clone, true); ENTRY_ANIMATIONS.put(entity.getUUID(), clone); }
                 }
                 mc.level.setDayTime(frozenDay); mc.level.setGameTime(frozenTime);
-                StillworldPostEffect.begin(mc.player.position().add(0,1,0));
+                var entry = new Vec3(tag.getDouble("entryX"),tag.getDouble("entryY"),tag.getDouble("entryZ"));
+                StillworldPostEffect.begin(entry.add(0,1,0));
+                RealityWorld.begin(session,mc.level);
+                RealityOrbRenderer.begin(entry);
             }
             case "end" -> clearSession();
             default -> {
@@ -265,6 +270,8 @@ public final class StillworldClient {
     private static void clearSession() {
         session = null; rank = null; GHOSTS.clear(); ENTRY_ANIMATIONS.clear(); DEAD.clear(); SLASHES.clear(); PLACED.clear();
         breaking = null; breakingTicks = 0; attackDelay = useDelay = 0;
+        RealityOrbRenderer.clear();
+        RealityWorld.clear();
         StillworldRendering.clear();
         FrozenBlockEntities.clear();
         StillworldPostEffect.clear();
@@ -286,6 +293,7 @@ public final class StillworldClient {
             knownLevel = mc.level;
         }
         if (mc.player == null || mc.level == null) { if (active()) clearSession(); return; }
+        if (active()) RealityWorld.tick();
         if (mc.screen != null) { stopBreak(); return; }
         while (TOGGLE.consumeClick()) PhaseNetwork.sendAction(PhaseNetwork.message("toggle"));
         while (MARK.consumeClick()) {

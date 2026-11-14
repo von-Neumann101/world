@@ -19,7 +19,7 @@ public final class FrozenBlockEntities {
     private static final Map<Long,Map<BlockPos,Saved>> CHUNKS = new HashMap<>();
 
     public static void beforeReplace(LevelChunk chunk) {
-        if (!chunk.getLevel().isClientSide || !StillworldClient.active()) return;
+        if (!chunk.getLevel().isClientSide || !StillworldClient.active() || RealityWorld.isMirror(chunk.getLevel())) return;
         var saved = CHUNKS.computeIfAbsent(chunk.getPos().toLong(), ignored -> new HashMap<>());
         for (var entity : chunk.getBlockEntities().values()) {
             var pose = capture(entity);
@@ -27,7 +27,7 @@ public final class FrozenBlockEntities {
         }
     }
     public static void afterReplace(LevelChunk chunk) {
-        if (!chunk.getLevel().isClientSide || !StillworldClient.active()) return;
+        if (!chunk.getLevel().isClientSide || !StillworldClient.active() || RealityWorld.isMirror(chunk.getLevel())) return;
         var saved = CHUNKS.get(chunk.getPos().toLong());
         if (saved != null) for (var entry : saved.entrySet()) {
             var entity = chunk.getBlockEntity(entry.getKey(),LevelChunk.EntityCreationType.IMMEDIATE);

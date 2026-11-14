@@ -57,7 +57,12 @@
     "client.VanillaModelMixins$ShulkerPose",
     "client.VanillaModelMixins$GoatPose",
     "client.VanillaModelMixins$WardenPose",
-    "client.VanillaModelMixins$ArmadilloPose"
+    "client.VanillaModelMixins$ArmadilloPose",
+    "client.RealityBiomeAccessor",
+    "client.RealityLevelRendererAccessor",
+    "client.RealityMinecraftAccessor",
+    "client.RealityChunkLightMixin",
+    "client.RealityLightAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

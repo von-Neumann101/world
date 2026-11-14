@@ -78,9 +78,11 @@ public final class PhaseManager {
         player.setDeltaMovement(Vec3.ZERO);
         var begin = PhaseNetwork.message("begin");
         begin.putUUID("session", session.id); begin.putInt("rank", rank.ordinal());
+        begin.putDouble("entryX", session.entry.x); begin.putDouble("entryY", session.entry.y); begin.putDouble("entryZ", session.entry.z);
         begin.putLong("dayTime", session.level.getDayTime()); begin.putLong("gameTime", session.entryTime);
         begin.putFloat("rain", session.level.getRainLevel(1)); begin.putFloat("thunder", session.level.getThunderLevel(1));
         PhaseNetwork.sendState(player, begin);
+        RealitySync.seed(session);
         for (var chunk : session.snapshot().chunks()) {
             var pos = chunk.chunk().getPos();
             if (player.connection != null && player.getChunkTrackingView().contains(pos.x, pos.z)) player.connection.send(chunk.packet());
