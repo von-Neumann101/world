@@ -90,5 +90,18 @@ tasks.register('regressionTest', JavaExec) {
 }
 tasks.named('test') { dependsOn 'regressionTest' }
 tasks.named('check') { dependsOn 'regressionTest' }
+
+// Runs only an invisible OpenGL context. No Minecraft window, input capture or test world.
+tasks.register('spatialShaderTest', JavaExec) {
+    group = 'verification'
+    dependsOn 'visualTestClasses'
+    classpath = sourceSets.visualTest.runtimeClasspath
+    mainClass = 'dev.stillworld.client.SpatialShaderProbe'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    systemProperty 'java.awt.headless', 'true'
+    systemProperty 'stillworld.automatedClient', 'true'
+    args project.file('src/main/resources/assets/stillworld/shaders/program').absolutePath,
+         project.file('docs/verification/spatial-reflection').absolutePath
+}
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
 tasks.named('jar') { manifest.attributes('Implementation-Version': project.version) }

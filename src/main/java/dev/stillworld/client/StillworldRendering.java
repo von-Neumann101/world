@@ -64,6 +64,7 @@ public final class StillworldRendering {
             worldPartial = event.getPartialTick().getGameTimeDeltaPartialTick(false);
             StillworldPostEffect.render(event);
             afterPostEffect(event);
+            StillworldPostEffect.renderSpatial();
             return;
         }
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_ENTITIES) return;
