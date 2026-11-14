@@ -38,16 +38,20 @@ void main() {
     vec4 color = texture(DiffuseSampler, clamp(texCoord + warp, pixel * 0.5, 1.0 - pixel * 0.5));
     float luminance = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
 
-    // Keep the original lit texture, with a lifted charcoal floor instead of thresholding it to black.
-    float surface = 0.075 + 0.39 * pow(max(luminance, 0.0), 0.88);
-    if (sky) surface = 0.19 + luminance * 0.13;
-    // Blackness grows logarithmically in world units, independent of render distance.
-    // Preserve the first four blocks and retain a small amount of texture in the farthest surfaces.
-    float toneDistance = sky ? ScanRange : distanceFromEye;
-    float blackness = min(0.88, 0.28 * log(1.0 + max(toneDistance - 4.0, 0.0) / 12.0));
+    // Silver-gray surfaces retain the original texture and lighting; contact shadows stay grounded.
+    float surface = 0.14 + 0.52 * pow(max(luminance, 0.0), 0.85);
+    // Distance removes contrast into a luminous atmosphere instead of multiplying everything to black.
+    // Logarithmic world distance with a soft ceiling keeps some separation even at long view distances.
+    float opticalDistance = log(1.0 + max(distanceFromEye - 8.0, 0.0) / 24.0);
+    float haze = 0.83 * (1.0 - exp(-0.60 * opticalDistance));
+    float atmosphere = 0.66;
+    if (sky) {
+        surface = atmosphere + 0.10 * luminance;
+        haze = 0.0;
+    }
 
     float edge = texture(EdgeSampler, texCoord).r;
-    // Thin isolated structure stays bright. Repeated cutout holes (leaves/grass) remain texture,
+    // Thin isolated structure gets a quiet rim. Repeated cutout holes (leaves/grass) remain texture,
     // instead of turning an entire canopy into a mass of white stippling.
     float density = texture(EdgeSampler, texCoord).g;
     density += texture(EdgeSampler, texCoord + pixel * vec2(2.0, 0.0)).g;
@@ -65,9 +69,13 @@ void main() {
     edge *= 1.0 - 0.99 * smoothstep(0.23, 0.50, density / 13.0);
     edge *= 1.0 - 0.8 * smoothstep(12.0, 80.0, distanceFromEye);
     if (sky) edge = 0.0;
-    float linework = mix(surface, 0.84, edge * 0.92) * (1.0 - blackness);
+    // Contours briefly catch the entry wave, then settle back into the surface rather than dominating it.
+    float rim = edge * (0.30 + front * 0.38);
+    float linework = mix(mix(surface, 0.86, rim), atmosphere, haze);
     vec3 result = mix(color.rgb, vec3(linework), coverage);
     // Narrow silver-white core and restrained halo follow world distance, not a screen-space circle.
     result = mix(result, vec3(0.9, 0.94, 0.98), front * 0.65);
-    fragColor = vec4(result, color.a);
+    // This is the completed world image. Empty sky may have alpha zero in the source framebuffer;
+    // carrying that alpha into the final blended blit would erase the atmosphere into a black horizon.
+    fragColor = vec4(result, 1.0);
 }

@@ -135,7 +135,7 @@ public final class ClientVisualSmoke {
                     if(!StillworldClient.active()||ghost==null||age<65)return;
                     require(StillworldPostEffect.settled(),"World linework shader did not finish its entry wave");
                     DistanceShaderProbe.check(output);
-                    checks.add("Actual shader darkened identical surfaces at 4/16/40/88/184 blocks with logarithmic blackness");
+                    checks.add("Actual shader retained near texture contrast, lifted distant shadows into silver haze at 4/16/40/88/184/512 blocks, and preserved pale sky layering");
                     ghostTick=ghost.tickCount;liveTick=live(cowId).tickCount;frozenTime=mc.level.getGameTime();frozenModel=ClientPose.capture(ghost);
                     for(var entry:originalBlockEntities.entrySet())require(mc.level.getBlockEntity(entry.getKey())!=entry.getValue(),"Entry did not exercise chunk replacement for "+entry.getKey());
                     blockEntityPose=readBlockEntityPose();
@@ -362,40 +362,59 @@ public final class ClientVisualSmoke {
     private void shot(String name)throws Exception{try(var image=Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())){image.writeToFile(output.resolve(name));}}
     private void checkLinework() throws Exception {
         try(var image=Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
+            float[] depth=readSceneDepth(image.getWidth(),image.getHeight());
             int count=0,bright=0,black=0;double sum=0;
             // Frozen cow and its silhouette: excludes sky/void, HUD and held weapon.
             for(int y=image.getHeight()*30/100;y<image.getHeight()*70/100;y++)for(int x=image.getWidth()*43/100;x<image.getWidth()*56/100;x++) {
+                if(depth[(image.getHeight()-1-y)*image.getWidth()+x]>=.999999f)continue;
                 int c=image.getPixelRGBA(x,y);double l=((c&255)+((c>>8)&255)+((c>>16)&255))/765.0;
                 sum+=l;count++;if(l>.72)bright++;if(l<.035)black++;
             }
+            require(count>image.getWidth()*image.getHeight()*.02,"Surface check did not sample enough actual world geometry");
             double mean=sum/count,lines=(double)bright/count,dark=(double)black/count;
             Files.writeString(output.resolve("linework-metrics.txt"),"mean="+mean+" white="+lines+" black="+dark+"\n");
-            require(mean>.08&&mean<.30,"Frozen surface did not become readable dark-gray linework: mean="+mean);
-            require(lines>.001&&lines<.15,"World lacks sparse bright contours, or has too many: "+lines);
-            require(dark<.15,"Linework crushed world surfaces into black: "+dark);
-            int contour=0,contourCount=0,leak=0,leakCount=0;
-            for(int y=image.getHeight()*35/100;y<image.getHeight()*58/100;y++)for(int x=image.getWidth()*395/1000;x<image.getWidth()*425/1000;x++) {
-                int c=image.getPixelRGBA(x,y);if(((c&255)+((c>>8)&255)+((c>>16)&255))>551)contour++;contourCount++;
-            }
+            require(mean>.22&&mean<.58,"Frozen surface did not become readable silver-gray: mean="+mean);
+            require(lines<.04,"Bright contours dominate the quieter silver-gray world: "+lines);
+            require(dark<.05,"World surfaces were crushed into black: "+dark);
+            int leak=0,leakCount=0;
             for(int y=image.getHeight()*50/100;y<image.getHeight()*60/100;y++)for(int x=image.getWidth()*27/100;x<image.getWidth()*36/100;x++) {
                 int c=image.getPixelRGBA(x,y);if(((c&255)+((c>>8)&255)+((c>>16)&255))>497)leak++;leakCount++;
             }
-            // One-sided minimal contours occupy less area than the former two-sided bright outline.
-            require((double)contour/contourCount>.008&&(double)contour/contourCount<.08,
-                    "Frozen cow needs a visible but sparse structural contour: "+(double)contour/contourCount);
+            // DistanceShaderProbe checks the positive, bounded response of a structural rim.
             require((double)leak/leakCount<.02,"Live white projection leaked through the foreground opaque block");
-            checks.add("Rendered world retained gray surface tones with sparse white contours and no crushed black surfaces");
+            checks.add("Rendered world retained silver-gray texture with restrained rims, no crushed black surfaces and no projection occlusion leak");
         }
     }
-    private void checkFoliage() {
+    private void checkFoliage() throws Exception {
         try(var image=Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
+            int x0=image.getWidth()*395/1000,x1=image.getWidth()*48/100;
+            int y0=image.getHeight()*22/100,y1=image.getHeight()*32/100;
+            float[] depth=readSceneDepth(image.getWidth(),image.getHeight());
             int white=0,count=0;
-            for(int y=image.getHeight()*22/100;y<image.getHeight()*32/100;y++)for(int x=image.getWidth()*395/1000;x<image.getWidth()*48/100;x++) {
+            for(int y=y0;y<y1;y++)for(int x=x0;x<x1;x++) {
+                // Pale sky through a leaf cutout is background, not a white line on foliage.
+                if(depth[(image.getHeight()-1-y)*image.getWidth()+x]>=.999999f)continue;
                 int c=image.getPixelRGBA(x,y);if(((c&255)+((c>>8)&255)+((c>>16)&255))>497)white++;count++;
             }
+            require(count>(x1-x0)*(y1-y0)/2,"Foliage check did not sample enough actual world geometry");
             require((double)white/count<.01,"Minimal foliage still has too much white stippling: "+(double)white/count);
             checks.add("Textured foliage retained restrained line density after window resizing");
         }
+    }
+    private static float[] readSceneDepth(int width,int height) throws Exception {
+        // The world depth survives the hand-rendering clear. Keep this test-only access local;
+        // the production renderer does not expose its intermediate buffers as public API.
+        var field=StillworldRendering.class.getDeclaredField("savedDepth");field.setAccessible(true);
+        var target=(com.mojang.blaze3d.pipeline.RenderTarget)field.get(null);
+        require(target!=null&&target.width==width&&target.height==height,"Saved world depth does not match the captured image");
+        float[] depth=new float[width*height];
+        int previous=org.lwjgl.opengl.GL11.glGetInteger(org.lwjgl.opengl.GL30.GL_READ_FRAMEBUFFER_BINDING);
+        try {
+            org.lwjgl.opengl.GL30.glBindFramebuffer(org.lwjgl.opengl.GL30.GL_READ_FRAMEBUFFER,target.frameBufferId);
+            org.lwjgl.opengl.GL11.glReadPixels(0,0,width,height,
+                    org.lwjgl.opengl.GL11.GL_DEPTH_COMPONENT,org.lwjgl.opengl.GL11.GL_FLOAT,depth);
+        } finally {org.lwjgl.opengl.GL30.glBindFramebuffer(org.lwjgl.opengl.GL30.GL_READ_FRAMEBUFFER,previous);}
+        return depth;
     }
     private static void require(boolean condition,String message){if(!condition)throw new AssertionError(message);}
     private void finish(Throwable failure){
