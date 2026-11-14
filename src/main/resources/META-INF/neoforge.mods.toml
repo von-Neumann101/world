@@ -6,6 +6,8 @@ modId="stillworld"
 version="0.1.0"
 displayName="Stillworld"
 description='''A frozen monochrome reflection of reality, accessed through Curios accessories.'''
+[[mixins]]
+config="stillworld.mixins.json"
 [[dependencies.stillworld]]
 modId="neoforge"
 type="required"

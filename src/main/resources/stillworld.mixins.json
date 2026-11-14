@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.stillworld.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": ["ChunkPacketAccessor", "ChunkMapAccessor", "ServerPacketsMixin", "SnapshotCollisionMixin", "EntityCollisionsMixin", "PhaseEntityMixin", "PhaseLivingMixin", "PhaseItemMixin", "PhaseInputMixin"],
+  "client": [],
+  "injectors": {"defaultRequire": 1}
+}

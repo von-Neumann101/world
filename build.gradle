@@ -21,6 +21,9 @@ sourceSets {
         runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
     }
 }
+if (providers.gradleProperty('commonOnly').isPresent()) {
+    sourceSets.main.java.exclude 'dev/stillworld/client/**', 'dev/stillworld/mixin/client/**'
+}
 neoForge {
     version = project.neo_version
     runs {
