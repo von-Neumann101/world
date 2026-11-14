@@ -19,6 +19,7 @@
     "PhasePlayerTouchMixin"
   ],
   "client": [
+    "client.AutomatedTestMouseMixin",
     "client.WalkAnimationAccessor",
     "client.AnimationStateAccessor",
     "client.EntityDispatcherMixin",

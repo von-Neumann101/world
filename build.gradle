@@ -35,6 +35,7 @@ neoForge {
         client { client() }
         visualClient {
             client()
+            systemProperty 'stillworld.automatedClient', 'true'
             sourceSet = sourceSets.visualTest
             gameDirectory = project.file('run')
             programArgument '--quickPlaySingleplayer'
@@ -44,6 +45,7 @@ neoForge {
         }
         multiplayerHost {
             client()
+            systemProperty 'stillworld.automatedClient', 'true'
             sourceSet = sourceSets.multiplayerTest
             gameDirectory = project.file('run/multiplayer-host')
             programArguments.addAll('--username', 'PhaseHost', '--quickPlaySingleplayer', 'StillworldMultiplayerSmoke')
@@ -52,6 +54,7 @@ neoForge {
         }
         multiplayerObserver {
             client()
+            systemProperty 'stillworld.automatedClient', 'true'
             sourceSet = sourceSets.multiplayerTest
             gameDirectory = project.file('run/multiplayer-observer')
             programArguments.addAll('--username', 'Observer', '--quickPlayMultiplayer', 'localhost:25588')
