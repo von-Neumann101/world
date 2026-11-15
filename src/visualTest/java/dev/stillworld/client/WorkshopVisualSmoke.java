@@ -65,6 +65,7 @@ public final class WorkshopVisualSmoke {
                     if(!serverDone||age<80)return;
                     int count=0;for(var pos:auxiliaries())if(mc.level.getBlockEntity(pos) instanceof AuxiliaryBlockEntity be&&be.biomeIndex()>=0)count++;
                     require(count==8,"All8miniature scenes must sync to realclient");
+                    MiniatureGeometryChecks.verify();checks.add("Nether shroomlights and ocean water sides have no overlapping solid geometry planes");
                     var models=mc.getBlockRenderer().getBlockModelShaper();var missing=mc.getModelManager().getMissingModel();
                     for(var block:List.of(WorkshopContent.ORE.get(),WorkshopContent.DEEPSLATE_ORE.get(),WorkshopContent.STABILIZER.get(),WorkshopContent.OVERWORLD_AUXILIARY.get(),WorkshopContent.NETHER_AUXILIARY.get(),WorkshopContent.END_AUXILIARY.get(),ModContent.TREATMENT_MACHINE.get()))
                         for(var state:block.getStateDefinition().getPossibleStates())require(models.getBlockModel(state)!=missing,"Missing block model: "+state);
@@ -106,14 +107,26 @@ public final class WorkshopVisualSmoke {
                     server(p->{var be=(TreatmentBlockEntity)p.serverLevel().getBlockEntity(CHAMBER);require(be.charge()==0&&Math.abs(p.getMaxHealth()-18)<.001,"Serverpartialheal andchargeagree");});next();
                 }
                 case 8->{
-                    if(!serverDone)return;checks.add("Ten-second treatment restores exactly8maxHP with2materials and releases door");finish(null);
+                    if(!serverDone)return;checks.add("Ten-second treatment restores exactly8maxHP with2materials and releases door");
+                    mc.options.hideGui=true;mc.options.fov().set(45);
+                    server(p->{p.setGameMode(GameType.CREATIVE);p.getAbilities().flying=true;p.onUpdateAbilities();p.connection.teleport(20.5,100.7,5.2,180,36);});next();
+                }
+                case 9->{
+                    if(!serverDone||age<30)return;shot("06-ocean-close.png");
+                    server(p->p.connection.teleport(22.5,100.7,-3.8,0,27));next();
+                }
+                case 10->{
+                    if(!serverDone)return;
+                    if(age==30)shot("07-crimson-close-a.png");
+                    if(age<50)return;shot("08-crimson-close-b.png");
+                    mc.options.hideGui=false;mc.options.fov().set(70);finish(null);
                 }
                 default->{}
             }
         } catch(Throwable t) {finish(t);}
     }
     private static ItemStack full() {var stack=new ItemStack(WorkshopContent.ANCHOR_RECORDER.get());stack.set(WorkshopContent.ANCHOR_VISITS.get(),255);return stack;}
-    private static List<BlockPos> auxiliaries() {return List.of(CENTER.north(2),CENTER.east(2),CENTER.south(2),CENTER.west(2),CENTER.offset(-1,0,-1),CENTER.offset(1,0,-1),CENTER.offset(1,0,1),CENTER.offset(-1,0,1));}
+    private static List<BlockPos> auxiliaries() {return List.of(CENTER.north(3),CENTER.east(3),CENTER.south(3),CENTER.west(3),CENTER.offset(-2,0,-2),CENTER.offset(2,0,-2),CENTER.offset(2,0,2),CENTER.offset(-2,0,2));}
     private void prepare(ServerPlayer p) {
         var level=p.serverLevel();
         for(int x=15;x<=27;x++)for(int z=-6;z<=6;z++) {

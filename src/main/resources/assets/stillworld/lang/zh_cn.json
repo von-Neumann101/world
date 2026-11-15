@@ -39,7 +39,7 @@
   "tooltip.stillworld.anchor_visited": "已锚定 · %s",
   "tooltip.stillworld.anchor_missing": "未到达 · %s",
   "message.stillworld.stabilizer.incomplete": "需要已记录全部 8 类群系的锚定记录器。",
-  "message.stillworld.stabilizer.invalid_structure": "结构不完整：正向距离 2 格放主世界辅助仪，四个对角放两台下界和两台末地辅助仪，同类相邻。",
+  "message.stillworld.stabilizer.invalid_structure": "结构不完整：正向距离 3 格放主世界辅助仪，四个对角各偏移 2 格放两台下界和两台末地辅助仪，同类在同一侧。",
   "message.stillworld.stabilizer.activated": "扭曲稳定装置已激活。",
   "message.stillworld.need_full_anchor": "手持满充能的锚定记录器右键激活治疗仪。",
   "message.stillworld.treatment_activated": "治疗仪已激活。放入稳定寂界原料充能，开门进入后治疗 10 秒。",

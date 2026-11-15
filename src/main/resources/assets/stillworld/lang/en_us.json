@@ -39,7 +39,7 @@
   "tooltip.stillworld.anchor_visited": "Anchored · %s",
   "tooltip.stillworld.anchor_missing": "Not visited · %s",
   "message.stillworld.stabilizer.incomplete": "Requires an Anchor Recorder with all 8 biome categories.",
-  "message.stillworld.stabilizer.invalid_structure": "Incomplete structure: Overworld at cardinal distance 2; adjacent Nether pair and End pair on diagonals.",
+  "message.stillworld.stabilizer.invalid_structure": "Incomplete structure: Overworld at cardinal distance 3; Nether and End pairs at diagonal offsets (+/-2, +/-2), each pair on one side.",
   "message.stillworld.stabilizer.activated": "Distortion stabilization array activated.",
   "message.stillworld.need_full_anchor": "Use a fully charged Anchor Recorder to activate this chamber.",
   "message.stillworld.treatment_activated": "Chamber activated. Supply stable material, open the door and enter for a 10-second treatment.",

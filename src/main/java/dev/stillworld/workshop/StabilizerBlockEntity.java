@@ -19,7 +19,7 @@ public final class StabilizerBlockEntity extends BaseContainerBlockEntity {
     public static final int PROCESSING_TICKS = 200;
     // Clockwise, starting north. The diagonal order starts northwest so both
     // Nether miniatures stay on one side, with both End miniatures opposite.
-    private static final int[][] OFFSETS = {{0,-2},{2,0},{0,2},{-2,0},{-1,-1},{1,-1},{1,1},{-1,1}};
+    private static final int[][] OFFSETS = {{0,-3},{3,0},{0,3},{-3,0},{-2,-2},{2,-2},{2,2},{-2,2}};
     private NonNullList<ItemStack> items = NonNullList.withSize(2, ItemStack.EMPTY);
     private int progress;
     private boolean authorized;

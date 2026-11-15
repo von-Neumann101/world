@@ -30,6 +30,7 @@ public final class BiomeMiniatureRenderer implements BlockEntityRenderer<Auxilia
             pose.pushPose();pose.translate(piece.x,piece.y,piece.z);pose.scale(piece.sx,piece.sy,piece.sz);
             renderer.renderSingleBlock(piece.state,pose,buffers,LightTexture.FULL_BRIGHT,OverlayTexture.NO_OVERLAY);pose.popPose();
         }
+        if(biome==2)OceanMiniatureSurface.render(pose,buffers);
         pose.popPose();
     }
     private static void add(List<Piece> p,Block block,float x,float y,float z,float sx,float sy,float sz) {p.add(new Piece(block.defaultBlockState(),x,y,z,sx,sy,sz));}
@@ -40,7 +41,7 @@ public final class BiomeMiniatureRenderer implements BlockEntityRenderer<Auxilia
         var scenes=new ArrayList<List<Piece>>();
         for(int biome=0;biome<8;biome++) {
             var p=new ArrayList<Piece>();
-            Block ground=switch(biome) {case 1->Blocks.SANDSTONE;case 2->Blocks.BLUE_CONCRETE;case 4->Blocks.WARPED_NYLIUM;case 5->Blocks.CRIMSON_NYLIUM;case 6,7->Blocks.END_STONE;default->Blocks.MOSS_BLOCK;};
+            Block ground=switch(biome) {case 1,2->Blocks.SANDSTONE;case 4->Blocks.WARPED_NYLIUM;case 5->Blocks.CRIMSON_NYLIUM;case 6,7->Blocks.END_STONE;default->Blocks.MOSS_BLOCK;};
             add(p,ground,0,0,0,6,.35f,6);
             switch(biome) {
                 case 0->{
@@ -52,15 +53,26 @@ public final class BiomeMiniatureRenderer implements BlockEntityRenderer<Auxilia
                     add(p,Blocks.CACTUS,1,.55f,1,.7f,1.5f,.7f);add(p,Blocks.DEAD_BUSH,4,1.05f,3,1,1,1);
                 }
                 case 2->{
-                    add(p,Blocks.LIGHT_BLUE_STAINED_GLASS,0,.35f,0,6,.45f,6);
-                    add(p,Blocks.SAND,3,.8f,3,2,.25f,2);add(p,Blocks.SEA_LANTERN,1,.35f,1,.5f,.5f,.5f);
-                    add(p,Blocks.TUBE_CORAL_BLOCK,1,.8f,3,.6f,.65f,.6f);add(p,Blocks.BRAIN_CORAL_BLOCK,2,.8f,1,.5f,.6f,.5f);
+                    // Shelves descend toward the front; small reef forms sit below the animated water surface.
+                    for(int x=0;x<3;x++)for(int z=0;z<4;z++)
+                        add(p,Blocks.SAND,x*2,.35f,z*1.5f,2,.12f+z*.10f+(x==2?.08f:0),1.5f);
+                    add(p,Blocks.ANDESITE,.3f,.7f,4.3f,1.1f,.42f,.9f);
+                    add(p,Blocks.TUBE_CORAL_BLOCK,.8f,.57f,1.6f,.55f,.45f,.65f);
+                    add(p,Blocks.BRAIN_CORAL_BLOCK,3.7f,.67f,2.5f,.7f,.35f,.6f);
+                    add(p,Blocks.FIRE_CORAL_BLOCK,4.5f,.85f,4.2f,.5f,.4f,.55f);
+                    add(p,Blocks.BUBBLE_CORAL_FAN,3.65f,1.03f,2.45f,.8f,.55f,.8f);
+                    add(p,Blocks.HORN_CORAL_FAN,.7f,1.03f,1.55f,.75f,.6f,.75f);
+                    add(p,Blocks.SEAGRASS,2,.58f,1.4f,.7f,.75f,.7f);
+                    add(p,Blocks.SEAGRASS,4.7f,.55f,.5f,.6f,.85f,.6f);
+                    add(p,Blocks.KELP_PLANT,2.2f,.8f,4.5f,.55f,.85f,.55f);
+                    add(p,Blocks.KELP_PLANT,2.9f,.8f,4.8f,.45f,.65f,.45f);
                 }
                 case 3->{tree(p,Blocks.OAK_LOG,Blocks.OAK_LEAVES,1,1);tree(p,Blocks.BIRCH_LOG,Blocks.BIRCH_LEAVES,3.5f,3);}
                 case 4,5->{
                     boolean warped=biome==4;tree(p,warped?Blocks.WARPED_STEM:Blocks.CRIMSON_STEM,warped?Blocks.WARPED_WART_BLOCK:Blocks.NETHER_WART_BLOCK,1,1);
                     tree(p,warped?Blocks.WARPED_STEM:Blocks.CRIMSON_STEM,warped?Blocks.WARPED_WART_BLOCK:Blocks.NETHER_WART_BLOCK,3.5f,3.5f);
-                    add(p,Blocks.SHROOMLIGHT,1.2f,1.1f,.7f,.55f,.55f,.55f);
+                    // Hang beneath the cap with a small gap: the old embedded lamp shared its front/bottom planes.
+                    add(p,Blocks.SHROOMLIGHT,1.2f,.5f,.7f,.55f,.55f,.55f);
                 }
                 case 6->{
                     add(p,Blocks.OBSIDIAN,.6f,.35f,.6f,.8f,2.4f,.8f);add(p,Blocks.OBSIDIAN,4.6f,.35f,4.6f,.8f,1.8f,.8f);

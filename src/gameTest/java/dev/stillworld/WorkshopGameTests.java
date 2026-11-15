@@ -28,6 +28,26 @@ import com.google.gson.JsonParser;
 @GameTestHolder(Stillworld.ID)
 @PrefixGameTestTemplate(false)
 public final class WorkshopGameTests {
+    @GameTest(template="empty") public static void expandedRingAcceptsNewLayoutAndRejectsOld(GameTestHelper h) {
+        var center=h.absolutePos(new BlockPos(4,2,4));
+        int[][] old={{0,-2},{2,0},{0,2},{-2,0},{-1,-1},{1,-1},{1,1},{-1,1}};
+        int[][] expanded={{0,-3},{3,0},{0,3},{-3,0},{-2,-2},{2,-2},{2,2},{-2,2}};
+        h.getLevel().setBlockAndUpdate(center,WorkshopContent.STABILIZER.get().defaultBlockState());
+        var machine=(StabilizerBlockEntity)h.getLevel().getBlockEntity(center);
+        var player=SessionGameTests.player(h);
+        for(int i=0;i<8;i++) {
+            var block=i<4?WorkshopContent.OVERWORLD_AUXILIARY.get():i<6?WorkshopContent.NETHER_AUXILIARY.get():WorkshopContent.END_AUXILIARY.get();
+            h.getLevel().setBlockAndUpdate(center.offset(expanded[i][0],0,expanded[i][1]),block.defaultBlockState());
+        }
+        h.assertTrue(machine.activate(fullRecorder(),player),"Expanded cardinal3/diagonal2 ring activates");
+        for(int i=0;i<8;i++) {
+            h.getLevel().setBlockAndUpdate(center.offset(expanded[i][0],0,expanded[i][1]),Blocks.AIR.defaultBlockState());
+            var block=i<4?WorkshopContent.OVERWORLD_AUXILIARY.get():i<6?WorkshopContent.NETHER_AUXILIARY.get():WorkshopContent.END_AUXILIARY.get();
+            h.getLevel().setBlockAndUpdate(center.offset(old[i][0],0,old[i][1]),block.defaultBlockState());
+        }
+        h.assertTrue(!machine.refreshStructure(),"Old compact ring no longer processes");
+        h.succeed();
+    }
     @GameTest(template="empty")
     public static void explorationContentExists(GameTestHelper h) {
         for (String name : new String[]{"anchor_recorder", "unstable_stillworld_material", "stable_stillworld_material",
@@ -158,10 +178,10 @@ public final class WorkshopGameTests {
     @GameTest(template="empty") public static void overlappingCentersCannotStealActiveAuxiliary(GameTestHelper h) {
         var center = h.absolutePos(new BlockPos(4, 2, 4));
         var first = build(h, center, 0);
-        var second = build(h, center.east(4), 0);
+        var second = build(h, center.east(6), 0);
         var player = SessionGameTests.player(h);
         h.assertTrue(first.activate(fullRecorder(), player), "First overlapping center can activate");
-        var shared = (AuxiliaryBlockEntity) h.getLevel().getBlockEntity(center.east(2));
+        var shared = (AuxiliaryBlockEntity) h.getLevel().getBlockEntity(center.east(3));
         h.assertTrue(!second.activate(fullRecorder(), player) && !second.active(), "Second center rejects shared auxiliary owned by active first center");
         h.assertTrue(center.equals(shared.owner()) && shared.biomeIndex() == 1 && first.active(), "Rejected second activation preserves first owner and biome mapping");
         h.getLevel().setBlockAndUpdate(center, Blocks.AIR.defaultBlockState());
@@ -282,7 +302,7 @@ public final class WorkshopGameTests {
         return stack;
     }
     private static BlockPos auxiliary(BlockPos center, int index, int rotation) {
-        int[][] offsets = {{0,-2},{2,0},{0,2},{-2,0},{-1,-1},{1,-1},{1,1},{-1,1}};
+        int[][] offsets = {{0,-3},{3,0},{0,3},{-3,0},{-2,-2},{2,-2},{2,2},{-2,2}};
         int x = offsets[index][0], z = offsets[index][1];
         for (int i = 0; i < rotation; i++) { int next = -z; z = x; x = next; }
         return center.offset(x, 0, z);
