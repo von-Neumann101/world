@@ -109,7 +109,7 @@ public final class RealityOrbRenderer {
             effect.safeGetUniform("HudCenter").set(PsycheView.WINDOW_X*scale,main.height-PsycheView.WINDOW_Y*scale);
             effect.safeGetUniform("HudRadius").set(radius*scale);
             effect.safeGetUniform("HudOpacity").set(PsycheView.windowOpacity());
-            effect.safeGetUniform("HudFar").set(PsycheView.farBlend());
+            effect.safeGetUniform("HudFar").set(PsycheView.windowFarBlend());
             effect.safeGetUniform("HudWaveTime").set(PsycheView.windowWaveTime());
             effect.safeGetUniform("AnimationTime").set((System.nanoTime()-animationStart)/1_000_000_000f);
             RenderSystem.disableBlend();RenderSystem.disableDepthTest();RenderSystem.resetTextureMatrix();

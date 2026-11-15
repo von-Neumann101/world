@@ -25,7 +25,7 @@ final class StillworldExitEffect {
         clear();
         if(!StillworldClient.active()||!StillworldPostEffect.loaded())return false;
         startRadius=PsycheView.windowRadius();startOpacity=PsycheView.windowOpacity();
-        far=PsycheView.farBlend();wave=PsycheView.windowWaveTime();active=true;
+        far=PsycheView.windowFarBlend();wave=PsycheView.windowWaveTime();active=true;
         return true;
     }
     static void render(RenderLevelStageEvent event,RenderTarget sceneDepth) {

@@ -155,6 +155,7 @@ public final class ClientVisualSmoke {
                     MirrorBufferChecks.check(true);
                     PsycheHudChecks.visible(output,"hud-entry",27,28);
                     windowTransitions.entry();
+                    WindowMotionChecks.check();
                     ghostTick=ghost.tickCount;liveTick=live(cowId).tickCount;frozenTime=mc.level.getGameTime();frozenModel=ClientPose.capture(ghost);
                     for(var entry:originalBlockEntities.entrySet())require(mc.level.getBlockEntity(entry.getKey())!=entry.getValue(),"Entry did not exercise chunk replacement for "+entry.getKey());
                     blockEntityPose=readBlockEntityPose();
