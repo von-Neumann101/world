@@ -85,12 +85,26 @@ public final class OrbShaderProbe {
         float[] visible = render(base, live, far, view, center, 1, 1);
         double radius = projectedRadius(DISTANCE);
 
+        // Constant input isolates actual silhouette movement from live-world animation.
+        float[] contourBase=solid(.32f,.32f,.32f),contourLive=solid(.70f,.40f,.15f);
+        float[] contour0=render(contourBase,contourLive,far,view,center,1,1,0);
+        float[] contour1=render(contourBase,contourLive,far,view,center,1,1,.8f);
+        float[] contourNext=render(contourBase,contourLive,far,view,center,1,1,1f/60);
+        double[] outline0=outline(contourBase,contour0,radius),outline1=outline(contourBase,contour1,radius);
+        double min=java.util.Arrays.stream(outline0).min().orElseThrow(),max=java.util.Arrays.stream(outline0).max().orElseThrow();
+        check(max-min>radius*.08,"silhouette varies by direction instead of remaining a perfect circle");
+        check(meanDifference(outline0,outline1)>radius*.015,"constant live input still has a continuously moving boundary");
+        check(meanDifference(outline0,outline(contourBase,contourNext,radius))<radius*.012+.25,
+                "adjacent animation frames move smoothly without a contour jump");
+        check(diskDifference(contourLive,contour1,radius*.5)<.00001,"boundary motion leaves the central live image stable");
+        write(output.resolve("contour-0.png"),contour0);write(output.resolve("contour-08.png"),contour1);
+
         // The central patch must contain the actual texture: a no-op, gray conversion or global
         // color-filter implementation fails here even when its silhouette looks plausible.
         check(diskDifference(live, visible, radius * .35) < .00001, "central real-world texture retains its original RGB");
         int mid = ((height / 2) * width + width / 2) * 4;
         check(visible[mid + 1] - visible[mid + 2] > .15, "orb interior remains visibly colored");
-        check(outerDifference(base, visible, radius * 1.01) < .00001, "pixels outside the true projected sphere are preserved");
+        check(outerDifference(base, visible, radius * 1.15) < .00001, "pixels outside the maximum rippled boundary are preserved");
         check(diskDifference(base, visible, radius * .35) > .1, "sphere replaces frozen pixels with the live scene");
         check(allFiniteOpaque(visible), "visible sphere is finite and fully opaque");
         check(maxDifference(base, render(base, live, far, view, center, 1, 0)) < .00001, "zero opacity preserves the frozen scene");
@@ -132,7 +146,8 @@ public final class OrbShaderProbe {
             Vector3f rotatedCenter = new Matrix4f().rotateY((float) Math.toRadians(-yaw))
                     .rotateX((float) Math.toRadians(-18)).transformPosition(new Vector3f(0, 0, -DISTANCE));
             float[] pixels = render(base, live, plane(rotated, 100), rotated, rotatedCenter, 1, 1);
-            check(maxDifference(visible, pixels) < .0001, "camera rotation preserves world-space sphere projection at yaw " + yaw);
+            check(diskDifference(live,pixels,radius*.35)<.00001&&outerDifference(base,pixels,radius*1.15)<.00001,
+                    "camera rotation keeps the live center and bounded world-space silhouette at yaw " + yaw);
         }
         float edgeX = (float) (DISTANCE * Math.tan(Math.toRadians(FOV / 2)) * width / height);
         float[] edge = render(base, live, far, view, new Vector3f(edgeX, 0, -DISTANCE), 1, 1);
@@ -147,6 +162,9 @@ public final class OrbShaderProbe {
     }
 
     private float[] render(float[] base, float[] live, float[] depths, Matrix4f matrix, Vector3f center, float radius, float opacity) {
+        return render(base,live,depths,matrix,center,radius,opacity,0);
+    }
+    private float[] render(float[] base, float[] live, float[] depths, Matrix4f matrix, Vector3f center, float radius, float opacity,float time) {
         upload(frozen, GL_RGBA, base);
         upload(reality, GL_RGBA, live);
         upload(depth, GL_RED, depths);
@@ -164,6 +182,7 @@ public final class OrbShaderProbe {
         glUniform3f(glGetUniformLocation(program, "SphereCenter"), center.x, center.y, center.z);
         glUniform1f(glGetUniformLocation(program, "SphereRadius"), radius);
         glUniform1f(glGetUniformLocation(program, "Opacity"), opacity);
+        glUniform1f(glGetUniformLocation(program, "AnimationTime"), time);
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
         glViewport(0, 0, width, height);
         glDisable(GL_DEPTH_TEST);
@@ -212,6 +231,22 @@ public final class OrbShaderProbe {
 
     private static double projectedRadius(float distance) {
         return height / (2 * Math.tan(Math.toRadians(FOV / 2)) * Math.sqrt(distance * distance - 1));
+    }
+
+    private static double[] outline(float[] base,float[] pixels,double radius) {
+        double[] result=new double[96];
+        for(int a=0;a<result.length;a++) {
+            double angle=a*Math.PI*2/result.length;
+            for(double r=radius*.6;r<radius*1.2;r+=.25) {
+                int x=(int)(width*.5+Math.cos(angle)*r),y=(int)(height*.5+Math.sin(angle)*r);
+                int i=(y*width+x)*4;
+                if(Math.abs(base[i]-pixels[i])+Math.abs(base[i+1]-pixels[i+1])+Math.abs(base[i+2]-pixels[i+2])>.03)result[a]=r;
+            }
+        }
+        return result;
+    }
+    private static double meanDifference(double[] a,double[] b) {
+        double sum=0;for(int i=0;i<a.length;i++)sum+=Math.abs(a[i]-b[i]);return sum/a.length;
     }
 
     private static int texture(int internal, int format) {

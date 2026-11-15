@@ -8,6 +8,7 @@ uniform mat4 ViewProjection;
 uniform vec3 SphereCenter;
 uniform float SphereRadius;
 uniform float Opacity;
+uniform float AnimationTime;
 uniform vec2 InSize;
 
 in vec2 texCoord;
@@ -16,6 +17,14 @@ out vec4 fragColor;
 vec3 relativePosition(vec2 uv, float depth) {
     vec4 point = InverseViewProjection * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     return point.xyz / point.w;
+}
+
+float boundaryWave(vec3 direction) {
+    // World-oriented, smooth waves with different speeds: local lobes flow around
+    // the opening rather than the whole silhouette breathing as one perfect circle.
+    return 0.070 * sin(dot(direction, vec3(3.7, 1.3, 2.1)) + AnimationTime * 0.85)
+         + 0.040 * sin(dot(direction, vec3(-1.7, 4.9, 2.8)) - AnimationTime * 1.10)
+         + 0.018 * sin(dot(direction, vec3(6.2, -3.4, 4.6)) + AnimationTime * 1.45);
 }
 
 void main() {
@@ -31,20 +40,28 @@ void main() {
     vec3 origin = eye.xyz / eye.w;
     vec3 ray = normalize(relativePosition(texCoord, 0.9) - relativePosition(texCoord, 0.0));
     vec3 offset = origin - SphereCenter;
-    float radiusSquared = SphereRadius * SphereRadius;
-    float c = dot(offset, offset) - radiusSquared;
     // Walking inside the effect never replaces the entire viewport. The runtime
     // also hides it there; this keeps near-surface and inside-eye samples finite.
-    if (c <= 0.0) return;
+    float envelope = SphereRadius * 1.15;
+    if (dot(offset, offset) <= envelope * envelope) return;
     float b = dot(offset, ray);
+    vec3 closest = offset - b * ray;
+    float closestLength = length(closest);
+    float baseRadial = closestLength / SphereRadius;
+    if (baseRadial > 1.15) return;
+    vec3 direction = closest / max(closestLength, 0.00001);
+    // A directional effective radius keeps the existing analytic depth test cheap.
+    // Only the perimeter deforms; the central live image and front depth stay steady.
+    float radius = SphereRadius * (1.0 + boundaryWave(direction) * smoothstep(0.35, 0.75, baseRadial));
+    float c = dot(offset, offset) - radius * radius;
     float discriminant = b * b - c;
-    float radial = length(cross(offset, ray)) / SphereRadius;
+    float radial = closestLength / radius;
     float pixelWidth = max(fwidth(radial), 0.00001);
     if (discriminant <= 0.0) return;
     float hitDistance = -b - sqrt(discriminant);
     if (hitDistance <= 0.0001) return;
 
-    // A real spherical surface, occluded by the existing frozen scene. Sampling
+    // The deformed shell remains occluded by the existing frozen scene. Sampling
     // main depth at the destination pixel keeps nearby blocks in front of it.
     float sceneDepth = texture(DepthSampler, texCoord).r;
     if (sceneDepth < 1.0) {
@@ -69,7 +86,7 @@ void main() {
     vec3 surface = live * (1.0 - 0.92 * pow(grazing, 1.35));
 
     // A restrained silver rim just inside the silhouette, roughly one pixel wide
-    // at a distance. It never outlines terrain or spreads outside the sphere.
+    // at a distance. The dark falloff and silver accent follow the same moving edge.
     float ringWidth = max(0.004, pixelWidth * 0.35);
     float ringCoordinate = (radial - 0.978) / ringWidth;
     float ring = exp(-ringCoordinate * ringCoordinate) * 0.58;

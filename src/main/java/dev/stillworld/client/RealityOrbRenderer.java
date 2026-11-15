@@ -30,12 +30,13 @@ public final class RealityOrbRenderer {
     private static GraphicsStatus graphics;
     private static int renderedFrames;
     private static int viewDistance;
+    private static long animationStart;
 
     public static boolean rendering(){return rendering;}
     static Vec3 center(){return center;}
     static int renderedFrames(){return renderedFrames;}
     static RenderTarget scene(){return reality;}
-    static void begin(Vec3 entry){clear();center=entry.add(0,1,0);}
+    static void begin(Vec3 entry){clear();center=entry.add(0,1,0);animationStart=System.nanoTime();}
     static void registerReloads(RegisterClientReloadListenersEvent event) {
         event.registerReloadListener((ResourceManagerReloadListener)resources->{releaseTargets();failed=false;rebuild=true;});
     }
@@ -47,8 +48,9 @@ public final class RealityOrbRenderer {
         double distance=eye.distanceTo(center);
         // Inside the shell there is no outward-facing surface to display. A wide fade
         // avoids covering the whole view when entering or walking through the anchor.
-        if(distance<=1.05||!event.getFrustum().isVisible(new AABB(center,center).inflate(1.03)))return;
-        float opacity=(float)Math.clamp((distance-1.05)/.45,0,1);
+        // Include the shader's maximum moving boundary in both visibility checks.
+        if(distance<=1.15||!event.getFrustum().isVisible(new AABB(center,center).inflate(1.15)))return;
+        float opacity=(float)Math.clamp((distance-1.15)/.45,0,1);
         var main=mc.getMainRenderTarget();
         boolean depthSaved=false;
         try {
@@ -65,6 +67,8 @@ public final class RealityOrbRenderer {
             effect.safeGetUniform("SphereCenter").set((float)relative.x,(float)relative.y,(float)relative.z);
             effect.safeGetUniform("SphereRadius").set(1f);
             effect.safeGetUniform("Opacity").set(opacity);
+            // World time is frozen in Stillworld, so animate from the session's real clock.
+            effect.safeGetUniform("AnimationTime").set((System.nanoTime()-animationStart)/1_000_000_000f);
             RenderSystem.disableBlend();RenderSystem.disableDepthTest();RenderSystem.resetTextureMatrix();
             compositor.process(0);
             renderedFrames++;

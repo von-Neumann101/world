@@ -203,6 +203,7 @@ public final class ClientVisualSmoke {
                 }
                 case ORB_VIEW -> {
                     aim(ENTRY.add(0,1,0));
+                    if(serverDone&&age==60)shot("orb-boundary-earlier.png");
                     if(!serverDone||age<100)return;
                     checkOrb("orb-fancy.png");checkRadialField();
                     require(lateRealityFrames>0,"Post-entry creature never rendered in the live orb while phased");
