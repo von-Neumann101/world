@@ -78,6 +78,7 @@ public final class ClientVisualSmoke {
     private UUID cowId, pigId, skeletonId, lateSpawnId;
     private DroppedItemPoseChecks itemPoseChecks;
     private final WindowTransitionChecks windowTransitions=new WindowTransitionChecks(output);
+    private final RiftVisualChecks riftChecks=new RiftVisualChecks(output);
     private int lateProjectionFrames,lateRealityFrames;
     private int markedProjectionFrames;
     private CompoundTag frozenModel;
@@ -410,6 +411,8 @@ public final class ClientVisualSmoke {
                     advance(Step.MARK);
                 }
                 case MARK -> {
+                    if(!riftChecks.tick()) {age=0;return;}
+                    aim(COW.add(0,.85,0));
                     if(!sent && age>=5){
                         require(StillworldClient.pick(1) instanceof EntityHitResult hit && hit.getEntity().getUUID().equals(cowId),"Aim did not use the old frozen AABB");
                         click("key.stillworld.mark");sent=true;

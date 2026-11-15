@@ -6,7 +6,6 @@ import com.mojang.blaze3d.vertex.VertexSorting;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.math.Axis;
 import dev.stillworld.ModContent;
 import dev.stillworld.Stillworld;
 import dev.stillworld.mixin.client.CompositeRenderTypeAccessor;
@@ -16,7 +15,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
@@ -85,6 +83,7 @@ public final class StillworldRendering {
             afterPostEffect(event);
             RealityOrbRenderer.render(event);
             RealityBladeRenderer.renderWorldWindows();
+            SlashRiftRenderer.render(event);
             StillworldPostEffect.renderSpatial();
             RealityOrbRenderer.renderHud();
             return;
@@ -209,7 +208,6 @@ public final class StillworldRendering {
                 if(visible(entity,event))
                     draw(entity,worldPartial,worldCamera,pose,buffers,0x28D8D8D8,true);
             }
-            renderSlashes(pose,buffers,worldCamera);
             renderPhasedPlayers(pose, buffers, worldCamera, worldPartial);
             buffers.endBatch();
             SkillParticles.renderEffects(event);
@@ -276,30 +274,6 @@ public final class StillworldRendering {
             bladeTint=previousBladeTint;
             pose.popPose();
         }
-    }
-
-    private static void renderSlashes(PoseStack pose, MultiBufferSource buffers, Vec3 camera) {
-        var consumer = buffers.getBuffer(RenderType.entityTranslucent(WHITE));
-        for (var slash : StillworldClient.slashes()) {
-            pose.pushPose();
-            pose.translate(slash.center.x - camera.x, slash.center.y - camera.y, slash.center.z - camera.z);
-            pose.mulPose(Axis.YP.rotationDegrees(-slash.yaw));
-            pose.mulPose(Axis.XP.rotationDegrees(slash.pitch));
-            // Both sides of the fixed 4 x 3 plane plus a narrow luminous diagonal.
-            quad(pose, consumer, -2, -1.5f, 2, 1.5f, -.15f, 0x38D8E4FF, false);
-            quad(pose, consumer, -2, -1.5f, 2, 1.5f, .15f, 0x38D8E4FF, true);
-            pose.pushPose(); pose.mulPose(Axis.ZP.rotationDegrees(30));
-            quad(pose, consumer, -1.9f, -.035f, 1.9f, .035f, -.16f, 0xDDEEF5FF, false);
-            quad(pose, consumer, -1.9f, -.035f, 1.9f, .035f, .16f, 0xDDEEF5FF, true);
-            pose.popPose(); pose.popPose();
-        }
-    }
-
-    private static void quad(PoseStack pose, VertexConsumer consumer, float x1, float y1, float x2, float y2,
-                             float z, int color, boolean reverse) {
-        float[][] vertices = reverse ? new float[][]{{x1,y1},{x1,y2},{x2,y2},{x2,y1}} : new float[][]{{x1,y1},{x2,y1},{x2,y2},{x1,y2}};
-        for (var vertex : vertices) consumer.addVertex(pose.last().pose(), vertex[0], vertex[1], z).setColor(color).setUv(.5f,.5f)
-                .setOverlay(OverlayTexture.NO_OVERLAY).setLight(LightTexture.FULL_BRIGHT).setNormal(pose.last(), 0,0, reverse ? -1 : 1);
     }
 
     private enum DiscardingConsumer implements VertexConsumer {

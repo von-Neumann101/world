@@ -66,7 +66,7 @@ public final class RealityOrbRenderer {
         // Include the shader's maximum moving boundary in both visibility checks.
         boolean sphereVisible=distance>BOUNDARY_RADIUS&&event.getFrustum().isVisible(new AABB(center,center).inflate(BOUNDARY_RADIUS));
         boolean hudVisible=PsycheView.windowRadius()>0&&PsycheView.windowOpacity()>0;
-        if(!sphereVisible&&!hudVisible&&!RealityBladeRenderer.needsReality())return;
+        if(!sphereVisible&&!hudVisible&&!RealityBladeRenderer.needsReality()&&!SlashRiftRenderer.visible(event))return;
         float opacity=(float)Math.clamp((distance-BOUNDARY_RADIUS)/.45,0,1);
         var main=mc.getMainRenderTarget();
         boolean depthSaved=false;

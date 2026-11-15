@@ -131,6 +131,18 @@ tasks.register('bladeShaderTest', JavaExec) {
 }
 tasks.named('jar') { manifest.attributes('Implementation-Version': project.version) }
 
+tasks.register('riftShaderTest', JavaExec) {
+    group = 'verification'
+    dependsOn 'visualTestClasses'
+    classpath = sourceSets.visualTest.runtimeClasspath
+    mainClass = 'dev.stillworld.client.RiftShaderProbe'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    systemProperty 'java.awt.headless', 'true'
+    systemProperty 'stillworld.automatedClient', 'true'
+    args project.file('src/main/resources/assets/stillworld/shaders/core/' + providers.gradleProperty('riftFragment').orElse('slash_rift.fsh').get()).absolutePath,
+         project.file("docs/verification/slash-rift-${project.version}").absolutePath
+}
+
 // Invisible GLSL test for the spherical live-world compositor.
 tasks.register('orbShaderTest', JavaExec) {
     group = 'verification'

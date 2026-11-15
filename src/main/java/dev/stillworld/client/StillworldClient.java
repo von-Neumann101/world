@@ -74,6 +74,7 @@ public final class StillworldClient {
         modBus.addListener(StillworldClient::setup);
         modBus.addListener(SilhouetteRenderType::registerShaders);
         modBus.addListener(BladeRenderType::registerShaders);
+        modBus.addListener(SlashRiftRenderType::registerShaders);
         modBus.addListener(RealityBladeRenderer::registerExtensions);
         modBus.addListener(RealityBladeRenderer::registerReloads);
         modBus.addListener(StillworldPostEffect::registerReloads);
