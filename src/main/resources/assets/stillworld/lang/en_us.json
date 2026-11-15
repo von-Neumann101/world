@@ -26,7 +26,6 @@
   "message.stillworld.linked_target": "This target requires linked-state rollback, planned for a later version.",
   "message.stillworld.slash_limit": "There are already 16 slashes waiting to strike.",
   "block.stillworld.distortion_treatment_machine": "Distortion Treatment Machine (Reserved)",
-  "hud.stillworld.psyche": "Psyche: %s / 100",
   "hud.stillworld.cooldown": "Switch ready in %ss",
   "hud.stillworld.doom": "Collapse in %ss",
   "message.stillworld.low_psyche": "Not enough psyche: %s required.",

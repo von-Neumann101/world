@@ -80,6 +80,7 @@ public final class StillworldRendering {
             afterPostEffect(event);
             RealityOrbRenderer.render(event);
             StillworldPostEffect.renderSpatial();
+            RealityOrbRenderer.renderHud();
             return;
         }
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_ENTITIES) return;

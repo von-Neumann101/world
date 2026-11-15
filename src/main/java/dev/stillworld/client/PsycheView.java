@@ -8,6 +8,8 @@ import net.neoforged.neoforge.client.event.RenderGuiEvent;
 
 /** Owner-only resource display. It never drives gameplay or modifies player movement. */
 final class PsycheView {
+    static final int WINDOW_X=41,WINDOW_Y=77;
+    private static final float WINDOW_RADIUS=28;
     private static int energy=100,cooldown,doom=-1;
     private static boolean known,far;
     private static float farBlend,exhaustion;
@@ -28,14 +30,19 @@ final class PsycheView {
     }
     private static float approach(float value,float target,float step) { return value+Math.clamp(target-value,-step,step); }
     static float farBlend() {return farBlend;}
+    static float windowRadius() {
+        var mc=Minecraft.getInstance();
+        if(!known||!StillworldClient.active()||mc.player==null||mc.options.hideGui)return 0;
+        // The aperture's area represents the remaining resource, with no residual rim at zero.
+        return WINDOW_RADIUS*(float)Math.sqrt(Math.clamp(energy/100f,0,1));
+    }
     static float exhaustion() {return exhaustion*exhaustion*(3-2*exhaustion);}
     static void clearSession() {farBlend=exhaustion=0;far=false;frameTime=0;}
     static void reset() {clearSession();known=false;energy=100;cooldown=0;doom=-1;}
     static void hud(RenderGuiEvent.Post event) {
         var mc=Minecraft.getInstance();if(!known||mc.player==null||mc.options.hideGui)return;
-        var gui=event.getGuiGraphics();int y=44;
+        var gui=event.getGuiGraphics();int y=StillworldClient.active()?114:44;
         if(StillworldClient.active()||ModContent.equippedRank(mc.player)!=null) {
-            gui.drawString(mc.font,Component.translatable("hud.stillworld.psyche",energy),8,y,energy==0?0xFFE18A8A:0xFFDDDDDD);y+=12;
             if(cooldown>0){gui.drawString(mc.font,Component.translatable("hud.stillworld.cooldown",(cooldown+19)/20),8,y,0xFFBBBBBB);y+=12;}
         }
         if(doom>=0)gui.drawString(mc.font,Component.translatable("hud.stillworld.doom",(doom+19)/20),8,y,0xFFFF7777);

@@ -12,6 +12,9 @@
     {"name":"SphereCenter","type":"float","count":3,"values":[0,0,0]},
     {"name":"SphereRadius","type":"float","count":1,"values":[1.2]},
     {"name":"Opacity","type":"float","count":1,"values":[0]},
-    {"name":"AnimationTime","type":"float","count":1,"values":[0]}
+    {"name":"AnimationTime","type":"float","count":1,"values":[0]},
+    {"name":"HudMode","type":"float","count":1,"values":[0]},
+    {"name":"HudCenter","type":"float","count":2,"values":[0,0]},
+    {"name":"HudRadius","type":"float","count":1,"values":[0]}
   ]
 }

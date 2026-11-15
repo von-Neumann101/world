@@ -155,6 +155,7 @@ public final class OrbShaderProbe {
         check(rectDifference(base, edge, 0, 0, width / 2, height) < .00001, "frame-edge sphere leaves the opposite half unchanged");
         check(rectDifference(base, edge, width * 3 / 4, 0, width, height) > .01, "partially clipped sphere stays visible");
         write(output.resolve("frame-edge.png"), edge);
+        checkHud(base,live,near,view,center,output);
         int error = glGetError();
         check(error == GL_NO_ERROR, "OpenGL error state is clear: " + error);
         Files.writeString(output.resolve("result.txt"), "PASS " + checks + " checks\nGPU: " + glGetString(GL_RENDERER) + "\n" + report);
@@ -165,6 +166,9 @@ public final class OrbShaderProbe {
         return render(base,live,depths,matrix,center,radius,opacity,0);
     }
     private float[] render(float[] base, float[] live, float[] depths, Matrix4f matrix, Vector3f center, float radius, float opacity,float time) {
+        return render(base,live,depths,matrix,center,radius,opacity,time,false,0);
+    }
+    private float[] render(float[] base, float[] live, float[] depths, Matrix4f matrix, Vector3f center, float radius, float opacity,float time,boolean hud,float hudRadius) {
         upload(frozen, GL_RGBA, base);
         upload(reality, GL_RGBA, live);
         upload(depth, GL_RED, depths);
@@ -183,6 +187,9 @@ public final class OrbShaderProbe {
         glUniform1f(glGetUniformLocation(program, "SphereRadius"), radius);
         glUniform1f(glGetUniformLocation(program, "Opacity"), opacity);
         glUniform1f(glGetUniformLocation(program, "AnimationTime"), time);
+        glUniform1f(glGetUniformLocation(program, "HudMode"), hud?1:0);
+        glUniform2f(glGetUniformLocation(program, "HudCenter"), 41,height-77);
+        glUniform1f(glGetUniformLocation(program, "HudRadius"), hudRadius);
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
         glViewport(0, 0, width, height);
         glDisable(GL_DEPTH_TEST);
@@ -191,6 +198,34 @@ public final class OrbShaderProbe {
         float[] result = new float[width * height * 4];
         glReadPixels(0, 0, width, height, GL_RGBA, GL_FLOAT, result);
         return result;
+    }
+
+    private void checkHud(float[] base,float[] live,float[] depths,Matrix4f view,Vector3f center,Path output) throws Exception {
+        float[] full=render(base,live,depths,view,center,0,0,0,true,28);
+        float[] quarter=render(base,live,depths,view,center,0,0,0,true,14);
+        float[] empty=render(base,live,depths,view,center,0,0,0,true,0);
+        int changedFull=0,changedQuarter=0;
+        double innerError=0,outerError=0;
+        for(int y=0;y<height;y++)for(int x=0;x<width;x++) {
+            int i=(y*width+x)*4;
+            double distance=Math.hypot(x+.5-41,y+.5-(height-77));
+            double fullChange=0,quarterChange=0;
+            for(int c=0;c<3;c++) {
+                fullChange+=Math.abs(base[i+c]-full[i+c]);
+                quarterChange+=Math.abs(base[i+c]-quarter[i+c]);
+                if(distance<10)innerError=Math.max(innerError,Math.abs(live[i+c]-full[i+c]));
+                if(distance>28*1.15)outerError=Math.max(outerError,Math.abs(base[i+c]-full[i+c]));
+            }
+            if(fullChange>.01)changedFull++;
+            if(quarterChange>.01)changedQuarter++;
+        }
+        check(innerError<.00001,"HUD reveals same-screen live reality even inside the world orb and behind foreground depth");
+        check(changedFull>1500&&changedQuarter>300&&changedQuarter<changedFull*.3,"less energy shrinks the top-left live aperture");
+        check(outerError<.00001,"HUD leaves pixels outside its bounded aperture unchanged");
+        check(maxDifference(base,empty)<.00001,"zero energy removes the whole HUD aperture including its edge");
+        float[] moving=render(base,live,depths,view,center,0,0,.8f,true,28);
+        check(maxDifference(full,moving)>.01,"HUD boundary moves independently of frozen world time");
+        write(output.resolve("hud-full.png"),full);write(output.resolve("hud-quarter.png"),quarter);write(output.resolve("hud-empty.png"),empty);
     }
 
     private static Matrix4f projection(float yaw, float pitch) {

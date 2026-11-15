@@ -26,7 +26,6 @@
   "message.stillworld.linked_target": "此目标需要关联状态回退，该部分将在后续版本实现。",
   "message.stillworld.slash_limit": "目前已有 16 道斩击等待生效。",
   "block.stillworld.distortion_treatment_machine": "扭曲治疗机（预留）",
-  "hud.stillworld.psyche": "灵能：%s / 100",
   "hud.stillworld.cooldown": "切换冷却：%s 秒",
   "hud.stillworld.doom": "生命崩溃：%s 秒",
   "message.stillworld.low_psyche": "灵能不足，需要 %s 点。",

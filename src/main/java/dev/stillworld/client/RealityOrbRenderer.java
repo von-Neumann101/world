@@ -21,14 +21,14 @@ import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import org.joml.Matrix4f;
 
-/** One non-recursive, visual-only live view, composited through the entry sphere. */
+/** One non-recursive live view shared by the entry sphere and the psyche HUD aperture. */
 public final class RealityOrbRenderer {
     private static final float RADIUS=1.2f;
     private static final double BOUNDARY_RADIUS=RADIUS*1.15;
     private static Vec3 center;
     private static RenderTarget reality, sceneDepth;
     private static PostChain compositor;
-    private static boolean rendering, failed, rebuild=true, refreshChunks;
+    private static boolean rendering, failed, rebuild=true, refreshChunks, hudReady;
     private static GraphicsStatus graphics;
     private static int renderedFrames;
     private static int viewDistance;
@@ -52,21 +52,25 @@ public final class RealityOrbRenderer {
 
     static void render(RenderLevelStageEvent event) {
         var mc=Minecraft.getInstance();
+        hudReady=false;
         if(rendering||failed||center==null||RealityWorld.level()==null||!StillworldPostEffect.loaded())return;
         Vec3 eye=event.getCamera().getPosition();
         double distance=eye.distanceTo(center);
         // Inside the shell there is no outward-facing surface to display. A wide fade
         // avoids covering the whole view when entering or walking through the anchor.
         // Include the shader's maximum moving boundary in both visibility checks.
-        if(distance<=BOUNDARY_RADIUS||!event.getFrustum().isVisible(new AABB(center,center).inflate(BOUNDARY_RADIUS)))return;
+        boolean sphereVisible=distance>BOUNDARY_RADIUS&&event.getFrustum().isVisible(new AABB(center,center).inflate(BOUNDARY_RADIUS));
+        boolean hudVisible=PsycheView.windowRadius()>0;
+        if(!sphereVisible&&!hudVisible)return;
         float opacity=(float)Math.clamp((distance-BOUNDARY_RADIUS)/.45,0,1);
         var main=mc.getMainRenderTarget();
         boolean depthSaved=false;
         try {
             resize(main);
-            sceneDepth.copyDepthFrom(main);
-            depthSaved=true;
+            if(sphereVisible){sceneDepth.copyDepthFrom(main);depthSaved=true;}
             drawReality(event);
+            hudReady=hudVisible;
+            if(!sphereVisible)return;
             main.bindWrite(true);
             var vp=new Matrix4f(event.getProjectionMatrix()).mul(event.getModelViewMatrix());
             var effect=((PostChainAccessor)(Object)compositor).stillworld$passes().getFirst().getEffect();
@@ -76,6 +80,7 @@ public final class RealityOrbRenderer {
             effect.safeGetUniform("SphereCenter").set((float)relative.x,(float)relative.y,(float)relative.z);
             effect.safeGetUniform("SphereRadius").set(RADIUS);
             effect.safeGetUniform("Opacity").set(opacity);
+            effect.safeGetUniform("HudMode").set(0f);
             // World time is frozen in Stillworld, so animate from the session's real clock.
             effect.safeGetUniform("AnimationTime").set((System.nanoTime()-animationStart)/1_000_000_000f);
             RenderSystem.disableBlend();RenderSystem.disableDepthTest();RenderSystem.resetTextureMatrix();
@@ -88,6 +93,28 @@ public final class RealityOrbRenderer {
             // The final post-chain blit clears depth. The following radial refraction
             // still needs the frozen world's depth, not the mirror or an empty sky.
             if(depthSaved)main.copyDepthFrom(sceneDepth);
+            main.bindWrite(true);RenderSystem.enableDepthTest();RenderSystem.depthMask(true);
+        }
+    }
+
+    /** Screen-space composition follows world refraction; the HUD never bends or gets terrain-occluded. */
+    static void renderHud() {
+        float radius=PsycheView.windowRadius();
+        if(!hudReady||failed||compositor==null||radius<=0)return;
+        var mc=Minecraft.getInstance();var main=mc.getMainRenderTarget();
+        try {
+            float scale=(float)mc.getWindow().getGuiScale();
+            var effect=((PostChainAccessor)(Object)compositor).stillworld$passes().getFirst().getEffect();
+            effect.safeGetUniform("HudMode").set(1f);
+            effect.safeGetUniform("HudCenter").set(PsycheView.WINDOW_X*scale,main.height-PsycheView.WINDOW_Y*scale);
+            effect.safeGetUniform("HudRadius").set(radius*scale);
+            effect.safeGetUniform("AnimationTime").set((System.nanoTime()-animationStart)/1_000_000_000f);
+            RenderSystem.disableBlend();RenderSystem.disableDepthTest();RenderSystem.resetTextureMatrix();
+            compositor.process(0);
+        } catch(Exception exception) {
+            failed=true;
+            LogUtils.getLogger().error("Unable to render Stillworld psyche window; retry after resource reload",exception);
+        } finally {
             main.bindWrite(true);RenderSystem.enableDepthTest();RenderSystem.depthMask(true);
         }
     }
@@ -162,6 +189,7 @@ public final class RealityOrbRenderer {
         compositor.resize(main.width,main.height);rebuild=true;
     }
     private static void releaseTargets() {
+        hudReady=false;
         if(compositor!=null){compositor.close();compositor=null;}
         if(reality!=null){reality.destroyBuffers();reality=null;}
         if(sceneDepth!=null){sceneDepth.destroyBuffers();sceneDepth=null;}

@@ -57,7 +57,7 @@ import java.util.function.Consumer;
 /** Exclusive development source set; no world-writing test code is shipped in the main jar. */
 @Mod(value = Stillworld.ID, dist = Dist.CLIENT)
 public final class ClientVisualSmoke {
-    private enum Step { WORLD, SETUP, BASELINE, ENTER, FROZEN, ORB_VIEW, ORB_RETURN, BE_RELOAD, VISION_RESIZE, VISION_RELOAD, VISION_FABULOUS, ORB_RELOADED, ORB_DISTANCE, ORB_RESTORED, MARK, ATTACK, SLASH, SLASH_RESOLVED, MINE_AIM, MINING, PLACE_AIM, PLACING, DEAD, EXIT, RESTORED, REAL_PLACE_AIM, REAL_PLACE, REAL_PLACE_DONE, CREATIVE_PICK, CREATIVE_REJECT, CREATIVE_EXIT, CREATIVE_TAKE, CREATIVE_PLACE_AIM, CREATIVE_PLACE, CREATIVE_DONE }
+    private enum Step { WORLD, SETUP, BASELINE, ENTER, FROZEN, ORB_VIEW, ORB_RETURN, BE_RELOAD, VISION_RESIZE, VISION_RELOAD, VISION_FABULOUS, ORB_RELOADED, ORB_DISTANCE, ORB_RESTORED, HUD_QUARTER, HUD_ZERO, HUD_HIDDEN, HUD_RESTORED, MARK, ATTACK, SLASH, SLASH_RESOLVED, MINE_AIM, MINING, PLACE_AIM, PLACING, DEAD, EXIT, RESTORED, REAL_PLACE_AIM, REAL_PLACE, REAL_PLACE_DONE, CREATIVE_PICK, CREATIVE_REJECT, CREATIVE_EXIT, CREATIVE_TAKE, CREATIVE_PLACE_AIM, CREATIVE_PLACE, CREATIVE_DONE }
     private static final Vec3 ENTRY = new Vec3(.5,100,.5), COW = new Vec3(.5,100,2.9);
     private static final BlockPos MINE = new BlockPos(1,100,2), SUPPORT = new BlockPos(-1,99,2), REAL_CHANGE = new BlockPos(3,100,2);
     private static final BlockPos REAL_SUPPORT = new BlockPos(1,99,-2);
@@ -150,7 +150,8 @@ public final class ClientVisualSmoke {
                     DistanceShaderProbe.check(output);
                     checks.add("Actual shader retained near atmosphere, deepened distant shadows and preserved pale sky layering");
                     require(RealityWorld.level()!=null && RealityWorld.level()!=mc.level,"Live orb world was not independent");
-                    MirrorBufferChecks.check(false);
+                    MirrorBufferChecks.check(true);
+                    PsycheHudChecks.visible(output,"hud-entry",27,28);
                     ghostTick=ghost.tickCount;liveTick=live(cowId).tickCount;frozenTime=mc.level.getGameTime();frozenModel=ClientPose.capture(ghost);
                     for(var entry:originalBlockEntities.entrySet())require(mc.level.getBlockEntity(entry.getKey())!=entry.getValue(),"Entry did not exercise chunk replacement for "+entry.getKey());
                     blockEntityPose=readBlockEntityPose();
@@ -207,8 +208,8 @@ public final class ClientVisualSmoke {
                     checks.add("Player off-hand pose survived capture and thirty vanilla Elytra render-model updates preserved its recorded wing angles");
                     checks.add("Snapshot model/time/terrain froze while live entity ticks and positions continued independently");
                     shot("03-live-white-projection.png");
-                    // Change options while the orb has never been visible: its initial
-                    // renderer state must still be tracked before the first offscreen draw.
+                    // The HUD has already used the shared live renderer; option changes
+                    // must also reach the world orb when it first enters the view.
                     firstOrbDistance=mc.options.renderDistance().get();
                     mc.options.renderDistance().set(firstOrbDistance==8?10:8);
                     mc.options.graphicsMode().set(net.minecraft.client.GraphicsStatus.FABULOUS);mc.levelRenderer.allChanged();
@@ -226,7 +227,7 @@ public final class ClientVisualSmoke {
                     var firstTarget=RealityWorld.renderer().getTranslucentTarget();
                     require(firstTarget!=null&&firstTarget.width==RealityOrbRenderer.scene().width
                             &&firstTarget.height==RealityOrbRenderer.scene().height,"Pre-first-draw option change lost orb-sized Fabulous targets");
-                    checks.add("Lazy mirror buffers remain unallocated until use; rendered layers upload normally, including options changed before first visibility");
+                    checks.add("Unused mirror buffers stay unallocated; shared HUD/world-orb rendering survives option changes");
                     require(lateRealityFrames>0,"Post-entry creature never rendered in the live orb while phased");
                     checks.add("Post-entry creature is hidden in Stillworld but still renders in the live orb before exit");
                     mc.options.renderDistance().set(firstOrbDistance);firstOrbDistance=0;
@@ -258,6 +259,7 @@ public final class ClientVisualSmoke {
                     checkRadialField();
                     checkFoliage();
                     shot("08-linework-resized.png");
+                    PsycheHudChecks.visible(output,"hud-resized",20,28);
                     reload=mc.reloadResourcePacks();advance(Step.VISION_RELOAD);
                 }
                 case VISION_RELOAD -> {
@@ -265,6 +267,7 @@ public final class ClientVisualSmoke {
                     reload.join();
                     checkRadialField();
                     shot("09-linework-resource-reload.png");
+                    PsycheHudChecks.visible(output,"hud-reloaded",20,28);
                     require(frozenModel.equals(ClientPose.capture(StillworldClient.ghosts().get(cowId))),"Resource reload changed the frozen entity pose");
                     org.lwjgl.glfw.GLFW.glfwSetWindowSize(mc.getWindow().getWindow(),originalWidth,originalHeight);
                     checks.add("Actual window resize and resource reload rebuilt linework and retained the settled state/frozen model");
@@ -303,7 +306,33 @@ public final class ClientVisualSmoke {
                     onServer(p->{p.connection.teleport(ENTRY.x,ENTRY.y,ENTRY.z,0,0);dev.stillworld.server.PsycheManager.setEnergy(p,100);});advance(Step.ORB_RESTORED);
                 }
                 case ORB_RESTORED -> {
-                    aim(COW.add(0,.85,0));if(!serverDone||age<25)return;advance(Step.MARK);
+                    aim(COW.add(0,.85,0));if(!serverDone||age<25)return;
+                    PsycheHudChecks.visible(output,"hud-full",27,28);
+                    onServer(p->dev.stillworld.server.PsycheManager.setEnergy(p,25));advance(Step.HUD_QUARTER);
+                }
+                case HUD_QUARTER -> {
+                    if(!serverDone||age<15)return;
+                    PsycheHudChecks.visible(output,"hud-quarter",13,14);
+                    onServer(p->dev.stillworld.server.PsycheManager.setEnergy(p,0));advance(Step.HUD_ZERO);
+                }
+                case HUD_ZERO -> {
+                    if(!serverDone||age<15)return;
+                    PsycheHudChecks.hidden(output,"hud-zero");
+                    onServer(p->dev.stillworld.server.PsycheManager.setEnergy(p,100));
+                    mc.options.hideGui=true;advance(Step.HUD_HIDDEN);
+                }
+                case HUD_HIDDEN -> {
+                    if(!serverDone||age<15)return;
+                    PsycheHudChecks.hidden(output,"hud-f1");
+                    mc.options.hideGui=false;mc.options.guiScale().set(1);mc.resizeDisplay();advance(Step.HUD_RESTORED);
+                }
+                case HUD_RESTORED -> {
+                    if(age<15)return;
+                    require(mc.getWindow().getGuiScale()==1,"GUI scale did not actually change");
+                    PsycheHudChecks.visible(output,"hud-gui-scale",27,28);
+                    mc.options.guiScale().set(2);mc.resizeDisplay();
+                    checks.add("Live psyche aperture works inside the world orb, shrinks with energy, disappears at zero/F1, and survives resize/reload/GUI scale");
+                    advance(Step.MARK);
                 }
                 case MARK -> {
                     if(!sent && age>=5){
@@ -371,6 +400,7 @@ public final class ClientVisualSmoke {
                     require(StillworldClient.ghosts().isEmpty(),"Exit retained snapshot entities");
                     require(!StillworldPostEffect.loaded(),"Exit retained the world linework effect");
                     require(RealityWorld.level()==null && RealityOrbRenderer.center()==null && RealityOrbRenderer.scene()==null,"Exit leaked orb world or graphics targets");
+                    require(PsycheView.windowRadius()==0,"Psyche aperture stayed visible after exit");
                     require(mc.level.getBlockState(MINE).isAir(),"Permanent mining was restored on exit");
                     require(mc.level.getBlockState(SUPPORT.above()).isAir(),"Temporary placement remained after exit");
                     require(mc.level.getBlockState(REAL_CHANGE).is(Blocks.DIAMOND_BLOCK),"Exit did not restore current real terrain");
@@ -500,7 +530,7 @@ public final class ClientVisualSmoke {
             if(StillworldClient.active()&&!RealityOrbRenderer.rendering())lateProjectionFrames++;
             else lateRealityFrames++;
         }
-        if(cowId!=null&&entity.getUUID().equals(cowId)&&StillworldClient.active()&&StillworldRendering.visualPass()
+        if(cowId!=null&&entity.getUUID().equals(cowId)&&StillworldClient.active()&&!RealityOrbRenderer.rendering()&&StillworldRendering.visualPass()
                 &&StillworldClient.locked(entity)&&entity!=StillworldClient.ghosts().get(cowId))markedProjectionFrames++;
     }
     private void onServer(Consumer<ServerPlayer> action) {

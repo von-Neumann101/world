@@ -10,6 +10,9 @@ uniform float SphereRadius;
 uniform float Opacity;
 uniform float AnimationTime;
 uniform vec2 InSize;
+uniform float HudMode;
+uniform vec2 HudCenter;
+uniform float HudRadius;
 
 in vec2 texCoord;
 out vec4 fragColor;
@@ -27,9 +30,37 @@ float boundaryWave(vec3 direction) {
          + 0.018 * sin(dot(direction, vec3(6.2, -3.4, 4.6)) + AnimationTime * 1.45);
 }
 
+vec4 orbSurface(vec3 frozen, float radial, float pixelWidth, vec2 centerUv, float opacity) {
+    float edgeCurve = smoothstep(0.55, 0.93, radial);
+    edgeCurve *= edgeCurve * (1.0 - smoothstep(0.94, 1.0, radial));
+    vec2 liveUv = texCoord + (texCoord - centerUv) * (0.055 * edgeCurve);
+    vec2 halfPixel = 0.5 / max(InSize, vec2(1.0));
+    vec3 live = texture(RealitySampler, clamp(liveUv, halfPixel, 1.0 - halfPixel)).rgb;
+    float grazing = smoothstep(0.68, 0.98, radial);
+    vec3 surface = live * (1.0 - 0.92 * pow(grazing, 1.35));
+    float ringWidth = max(0.004, pixelWidth * 0.35);
+    float ringCoordinate = (radial - 0.978) / ringWidth;
+    float ring = exp(-ringCoordinate * ringCoordinate) * 0.58;
+    surface = mix(surface, vec3(0.70, 0.74, 0.78), ring);
+    float coverage = 1.0 - smoothstep(1.0 - pixelWidth * 0.7, 1.0, radial);
+    return vec4(mix(frozen, surface, coverage * clamp(opacity, 0.0, 1.0)), 1.0);
+}
+
 void main() {
     vec3 frozen = texture(DiffuseSampler, texCoord).rgb;
     fragColor = vec4(frozen, 1.0);
+    if (HudMode > 0.5) {
+        if (HudRadius <= 0.0) return;
+        vec2 delta = texCoord * InSize - HudCenter;
+        float distance = length(delta);
+        float baseRadial = distance / HudRadius;
+        if (baseRadial > 1.15) return;
+        vec3 direction = vec3(delta / max(distance, 0.00001), 0.0);
+        float radius = HudRadius * (1.0 + boundaryWave(direction) * smoothstep(0.35, 0.75, baseRadial));
+        float radial = distance / radius;
+        fragColor = orbSurface(frozen, radial, max(fwidth(radial), 0.00001), HudCenter / InSize, 1.0);
+        return;
+    }
     if (Opacity <= 0.0 || SphereRadius <= 0.0) return;
 
     // The view matrix is rotation-only. Recover the perspective eye as well as a
@@ -71,26 +102,10 @@ void main() {
 
     // The center is the untouched live color image. Only grazing rays acquire a
     // mild lens curvature and a dark surface falloff, without tracing block edges.
-    vec2 liveUv = texCoord;
+    vec2 centerUv = texCoord;
     vec4 projectedCenter = ViewProjection * vec4(SphereCenter, 1.0);
     if (projectedCenter.w > 0.0001) {
-        vec2 centerUv = projectedCenter.xy / projectedCenter.w * 0.5 + 0.5;
-        float edgeCurve = smoothstep(0.55, 0.93, radial);
-        edgeCurve *= edgeCurve * (1.0 - smoothstep(0.94, 1.0, radial));
-        liveUv += (texCoord - centerUv) * (0.055 * edgeCurve);
+        centerUv = projectedCenter.xy / projectedCenter.w * 0.5 + 0.5;
     }
-    vec2 halfPixel = 0.5 / max(InSize, vec2(1.0));
-    liveUv = clamp(liveUv, halfPixel, 1.0 - halfPixel);
-    vec3 live = texture(RealitySampler, liveUv).rgb;
-    float grazing = smoothstep(0.68, 0.98, radial);
-    vec3 surface = live * (1.0 - 0.92 * pow(grazing, 1.35));
-
-    // A restrained silver rim just inside the silhouette, roughly one pixel wide
-    // at a distance. The dark falloff and silver accent follow the same moving edge.
-    float ringWidth = max(0.004, pixelWidth * 0.35);
-    float ringCoordinate = (radial - 0.978) / ringWidth;
-    float ring = exp(-ringCoordinate * ringCoordinate) * 0.58;
-    surface = mix(surface, vec3(0.70, 0.74, 0.78), ring);
-    float coverage = 1.0 - smoothstep(1.0 - pixelWidth * 0.7, 1.0, radial);
-    fragColor = vec4(mix(frozen, surface, coverage * clamp(Opacity, 0.0, 1.0)), 1.0);
+    fragColor = orbSurface(frozen, radial, pixelWidth, centerUv, Opacity);
 }
