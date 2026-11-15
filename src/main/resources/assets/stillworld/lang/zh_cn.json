@@ -1,9 +1,5 @@
 {
   "itemGroup.stillworld": "寂界",
-  "item.stillworld.foresight_lens": "预视镜",
-  "curios.identifier.foresight": "预视饰品",
-  "tooltip.stillworld.foresight": "佩戴后以白色虚影预视生物 1.5 秒后的位置",
-  "tooltip.stillworld.foresight_prediction": "结合当前运动与寻路预测 · 寂界内仍需 rank4.5",
   "item.stillworld.stillworld_blade": "寂界刃",
   "curios.identifier.stillworld": "寂界饰品",
   "tooltip.stillworld.charm": "佩戴在寂界饰品栏 · rank%s · V 进入或退出",

@@ -1,9 +1,5 @@
 {
   "itemGroup.stillworld": "Stillworld",
-  "item.stillworld.foresight_lens": "Foresight Lens",
-  "curios.identifier.foresight": "Foresight",
-  "tooltip.stillworld.foresight": "Equip to see white echoes of creatures 1.5 seconds ahead",
-  "tooltip.stillworld.foresight_prediction": "Predicts current motion and navigation · Stillworld requires rank4.5",
   "item.stillworld.stillworld_blade": "Stillworld Blade",
   "curios.identifier.stillworld": "Stillworld",
   "tooltip.stillworld.charm": "Equip in the Stillworld slot · rank%s · V to enter or leave",

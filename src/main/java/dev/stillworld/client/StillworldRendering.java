@@ -61,7 +61,6 @@ public final class StillworldRendering {
             if(!StillworldClient.active()||reality) {
                 var buffers=Minecraft.getInstance().renderBuffers().bufferSource();
                 renderPhasedPlayers(event.getPoseStack(),buffers,event.getCamera().getPosition(),event.getPartialTick().getGameTimeDeltaPartialTick(false));
-                if(!reality)renderForesight(event,event.getPoseStack(),buffers,event.getCamera().getPosition(),event.getPartialTick().getGameTimeDeltaPartialTick(false));
                 buffers.endBatch();
             }
             return;
@@ -113,11 +112,8 @@ public final class StillworldRendering {
     }
 
     private static boolean visible(Entity entity,RenderLevelStageEvent event) {
-        return visible(entity,event,event.getFrustum());
-    }
-    private static boolean visible(Entity entity,RenderLevelStageEvent event,net.minecraft.client.renderer.culling.Frustum frustum) {
         var mc=Minecraft.getInstance();var camera=event.getCamera().getPosition();
-        if(!mc.getEntityRenderDispatcher().shouldRender(entity,frustum,camera.x,camera.y,camera.z))return false;
+        if(!mc.getEntityRenderDispatcher().shouldRender(entity,event.getFrustum(),camera.x,camera.y,camera.z))return false;
         var pos=entity.blockPosition();
         // Section lookups wrap their X/Z indices; they alone cannot establish
         // that a far snapshot's terrain is actually present on this client.
@@ -207,14 +203,12 @@ public final class StillworldRendering {
         try {
             var buffers = mc.renderBuffers().bufferSource();
             var pose=new PoseStack();
-            boolean foresight=ModContent.hasForesight(mc.player);
-            if(StillworldClient.seeLive()&&!foresight)for(var entity:mc.level.entitiesForRendering()) {
+            if(StillworldClient.seeLive())for(var entity:mc.level.entitiesForRendering()) {
                 if(!(entity instanceof LivingEntity)||entity==mc.player||StillworldClient.phased(entity)
                         ||StillworldClient.locked(entity)||!entity.isAlive()||!StillworldClient.captured(entity.getUUID()))continue;
                 if(visible(entity,event))
                     draw(entity,worldPartial,worldCamera,pose,buffers,0x28D8D8D8,true);
             }
-            if(foresight)renderForesight(event,pose,buffers,worldCamera,worldPartial);
             renderSlashes(pose,buffers,worldCamera);
             renderPhasedPlayers(pose, buffers, worldCamera, worldPartial);
             buffers.endBatch();
@@ -223,21 +217,6 @@ public final class StillworldRendering {
             mc.gameRenderer.lightTexture().turnOffLightLayer();
             stack.popMatrix(); RenderSystem.applyModelViewMatrix();
             RenderSystem.setProjectionMatrix(projection, VertexSorting.DISTANCE_TO_ORIGIN);
-        }
-    }
-
-    private static void renderForesight(RenderLevelStageEvent event,PoseStack pose,MultiBufferSource buffers,Vec3 camera,float partial) {
-        var mc=Minecraft.getInstance();
-        if(mc.level==null||mc.player==null||!ModContent.hasForesight(mc.player))return;
-        var futureFrustum=new net.minecraft.client.renderer.culling.Frustum(event.getFrustum());
-        for(var entity:mc.level.entitiesForRendering()) {
-            if(!ForesightView.eligible(entity))continue;
-            var offset=ForesightView.offset(entity,partial);if(offset==null)continue;
-            // Keep source tracking/distance gates, but cull the projected body at its own position.
-            futureFrustum.prepare(camera.x-offset.x,camera.y-offset.y,camera.z-offset.z);
-            if(!visible(entity,event,futureFrustum))continue;
-            pose.pushPose();pose.translate(offset.x,offset.y,offset.z);
-            try {draw(entity,partial,camera,pose,buffers,0x28D8D8D8,true);}finally {pose.popPose();}
         }
     }
 

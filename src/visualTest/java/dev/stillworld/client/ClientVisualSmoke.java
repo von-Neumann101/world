@@ -90,7 +90,7 @@ public final class ClientVisualSmoke {
     private net.minecraft.client.GraphicsStatus originalGraphics;
 
     public ClientVisualSmoke(IEventBus bus) {
-        if (Boolean.getBoolean("stillworld.visualTest.auto")&&!Boolean.getBoolean("stillworld.workshopTest")&&!Boolean.getBoolean("stillworld.foresightTest")) {
+        if (Boolean.getBoolean("stillworld.visualTest.auto")&&!Boolean.getBoolean("stillworld.workshopTest")) {
             System.out.println("STILLWORLD VISUAL HARNESS LOADED -> "+output);
             try { Files.createDirectories(output); Files.writeString(output.resolve("result.txt"),"RUNNING: waiting for StillworldSmoke\n"); }
             catch (Exception exception) { throw new IllegalStateException("Cannot create the visual test report",exception); }
