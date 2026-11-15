@@ -12,6 +12,13 @@ public final class EntityVisual {
         var result = new CompoundTag();
         result.putUUID("uuid", entity.getUUID());
         result.putInt("entityId", entity.getId());
+        // Frozen actors are sent independently of vanilla entity tracking. Keep
+        // its range so the client cannot reveal actors that reality would omit.
+        int range=entity.getType().clientTrackingRange()*16;
+        for(var passenger:entity.getIndirectPassengers())range=Math.max(range,passenger.getType().clientTrackingRange()*16);
+        var server=entity.getServer();
+        result.putInt("trackingBaseRange",range);
+        result.putInt("trackingRange",server==null?range:server.getScaledTrackingDistance(range));
         var saved = new CompoundTag();
         entity.saveWithoutId(saved);
         saved.putString("id", EntityType.getKey(entity.getType()).toString());

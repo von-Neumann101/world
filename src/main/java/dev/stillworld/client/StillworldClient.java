@@ -49,6 +49,8 @@ import java.util.*;
 /** All state here belongs to the physical client. Visual entities never enter ClientLevel's entity list. */
 @Mod(value = Stillworld.ID, dist = Dist.CLIENT)
 public final class StillworldClient {
+    static final String TRACKING_RANGE="stillworld:tracking_range";
+    static final String TRACKING_BASE_RANGE="stillworld:tracking_base_range";
     private static final KeyMapping TOGGLE = new KeyMapping("key.stillworld.toggle", GLFW.GLFW_KEY_V, "key.categories.stillworld");
     private static final KeyMapping MARK = new KeyMapping("key.stillworld.mark", GLFW.GLFW_KEY_R, "key.categories.stillworld");
     private static UUID session;
@@ -207,6 +209,8 @@ public final class StillworldClient {
         }
         if (entity == null) return null;
         entity.setUUID(visual.getUUID("uuid"));
+        if(visual.contains("trackingRange",Tag.TAG_INT))entity.getPersistentData().putInt(TRACKING_RANGE,visual.getInt("trackingRange"));
+        if(visual.contains("trackingBaseRange",Tag.TAG_INT))entity.getPersistentData().putInt(TRACKING_BASE_RANGE,visual.getInt("trackingBaseRange"));
         // Render-only ID preserves vanilla ID-derived phases, e.g. phantom wing flapping. Not registered in ClientLevel.
         if (visual.contains("entityId", Tag.TAG_INT)) entity.setId(visual.getInt("entityId"));
         entity.tickCount = visual.getInt("tick");

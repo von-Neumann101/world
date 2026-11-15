@@ -92,16 +92,39 @@ public final class StillworldRendering {
         if (StillworldClient.active() && !reality) {
             for (var ghost : StillworldClient.ghosts().values()) {
                 if (StillworldClient.isDead(ghost.getUUID()) || StillworldClient.phased(ghost)) continue;
-                if (event.getFrustum().isVisible(ghost.getBoundingBox().inflate(.5))) draw(ghost, 1, camera, pose, buffers, -1, false);
+                if (visible(ghost,event)) draw(ghost, 1, camera, pose, buffers, -1, false);
             }
         } else {
             for (var original : mc.level.entitiesForRendering()) {
                 var clone = StillworldClient.frozenReplacement(original);
-                if (clone != null && original.isAlive() && event.getFrustum().isVisible(clone.getBoundingBox().inflate(.5)))
+                if (clone != null && original.isAlive() && visible(clone,event))
                     draw(clone, 1, camera, pose, buffers, -1, false);
             }
         }
         buffers.endBatch();
+    }
+
+    private static boolean visible(Entity entity,RenderLevelStageEvent event) {
+        var mc=Minecraft.getInstance();var camera=event.getCamera().getPosition();
+        if(!mc.getEntityRenderDispatcher().shouldRender(entity,event.getFrustum(),camera.x,camera.y,camera.z))return false;
+        var pos=entity.blockPosition();
+        // Section lookups wrap their X/Z indices; they alone cannot establish
+        // that a far snapshot's terrain is actually present on this client.
+        if(mc.level.getChunkSource().getChunk(pos.getX()>>4,pos.getZ()>>4,false)==null)return false;
+        if(!mc.level.isOutsideBuildHeight(pos)&&!event.getLevelRenderer().isSectionCompiled(pos))return false;
+        var data=entity.getPersistentData();
+        if(mc.player!=null&&data.contains(StillworldClient.TRACKING_RANGE,net.minecraft.nbt.Tag.TAG_INT)) {
+            int trackingRange=data.getInt(StillworldClient.TRACKING_RANGE);
+            var server=mc.getSingleplayerServer();
+            // Integrated servers scale tracking from the current entity-distance
+            // option, which may change after entry. Remote server limits are authoritative.
+            if(server!=null&&data.contains(StillworldClient.TRACKING_BASE_RANGE,net.minecraft.nbt.Tag.TAG_INT))
+                trackingRange=server.getScaledTrackingDistance(data.getInt(StillworldClient.TRACKING_BASE_RANGE));
+            double range=Math.min(trackingRange,mc.options.getEffectiveRenderDistance()*16);
+            double dx=entity.getX()-mc.player.getX(),dz=entity.getZ()-mc.player.getZ();
+            if(dx*dx+dz*dz>range*range)return false;
+        }
+        return true;
     }
 
     private static void captureDepth() {
@@ -176,7 +199,7 @@ public final class StillworldRendering {
             if(StillworldClient.seeLive())for(var entity:mc.level.entitiesForRendering()) {
                 if(!(entity instanceof LivingEntity)||entity==mc.player||StillworldClient.phased(entity)
                         ||StillworldClient.locked(entity)||!entity.isAlive()||!StillworldClient.captured(entity.getUUID()))continue;
-                if(event.getFrustum().isVisible(entity.getBoundingBox().inflate(.5)))
+                if(visible(entity,event))
                     draw(entity,worldPartial,worldCamera,pose,buffers,0x28D8D8D8,true);
             }
             renderSlashes(pose,buffers,worldCamera);

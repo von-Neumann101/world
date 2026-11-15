@@ -187,6 +187,8 @@ public final class ClientVisualSmoke {
                     require(java.util.stream.StreamSupport.stream(RealityWorld.level().entitiesForRendering().spliterator(),false).anyMatch(e->e==real),"Orb did not expose the actual moving creature");
                     checkRealityPackets();
                     MirrorCacheChecks.check();
+                    EntityVisibilityChecks.check(cowId);
+                    checks.add("Snapshot visibility follows entity distance/settings, server tracking range and compiled terrain; approaching reveals it normally");
                     checks.add("Mirror cache rejected distant chunks/light and preserved visible terrain across view-distance changes");
                     checks.add("Live orb world updated its block/time/creature while the gameplay snapshot stayed frozen");
                     for(var entity:mc.level.entitiesForRendering())require(entity!=ghost,"A visual clone was registered as a real level entity");
