@@ -31,6 +31,8 @@ public final class RealityOrbRenderer {
     private static boolean rendering, failed, rebuild=true, refreshChunks, hudReady;
     private static GraphicsStatus graphics;
     private static int renderedFrames;
+    private static boolean bladeSceneReady;
+    private static int liveFrames;
     private static int viewDistance;
     private static long animationStart;
 
@@ -38,6 +40,9 @@ public final class RealityOrbRenderer {
     static Vec3 center(){return center;}
     static int renderedFrames(){return renderedFrames;}
     static RenderTarget scene(){return reality;}
+    static boolean bladeSceneReady(){return bladeSceneReady&&reality!=null;}
+    static void invalidateBladeFrame(){bladeSceneReady=false;}
+    static int liveFrames(){return liveFrames;}
     static void begin(Vec3 entry){
         clear();center=entry.add(0,RADIUS,0);animationStart=System.nanoTime();
         // Match the view area just built by RealityWorld.begin, even before first visibility.
@@ -61,7 +66,7 @@ public final class RealityOrbRenderer {
         // Include the shader's maximum moving boundary in both visibility checks.
         boolean sphereVisible=distance>BOUNDARY_RADIUS&&event.getFrustum().isVisible(new AABB(center,center).inflate(BOUNDARY_RADIUS));
         boolean hudVisible=PsycheView.windowRadius()>0&&PsycheView.windowOpacity()>0;
-        if(!sphereVisible&&!hudVisible)return;
+        if(!sphereVisible&&!hudVisible&&!RealityBladeRenderer.needsReality())return;
         float opacity=(float)Math.clamp((distance-BOUNDARY_RADIUS)/.45,0,1);
         var main=mc.getMainRenderTarget();
         boolean depthSaved=false;
@@ -69,6 +74,7 @@ public final class RealityOrbRenderer {
             resize(main);
             if(sphereVisible){sceneDepth.copyDepthFrom(main);depthSaved=true;}
             drawReality(event);
+            bladeSceneReady=true;liveFrames++;
             hudReady=hudVisible;
             if(!sphereVisible)return;
             main.bindWrite(true);
@@ -192,6 +198,7 @@ public final class RealityOrbRenderer {
         compositor.resize(main.width,main.height);rebuild=true;
     }
     private static void releaseTargets() {
+        bladeSceneReady=false;
         hudReady=false;
         if(compositor!=null){compositor.close();compositor=null;}
         if(reality!=null){reality.destroyBuffers();reality=null;}

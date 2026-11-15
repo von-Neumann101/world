@@ -57,7 +57,7 @@ import java.util.function.Consumer;
 /** Exclusive development source set; no world-writing test code is shipped in the main jar. */
 @Mod(value = Stillworld.ID, dist = Dist.CLIENT)
 public final class ClientVisualSmoke {
-    private enum Step { WORLD, SETUP, BASELINE, ENTER, FROZEN, ORB_VIEW, ORB_RETURN, BE_RELOAD, VISION_RESIZE, VISION_RELOAD, VISION_FABULOUS, ORB_RELOADED, ORB_DISTANCE, ORB_RESTORED, HUD_QUARTER, HUD_ZERO, HUD_HIDDEN, HUD_RESTORED, HUD_NEAR_SPEED, HUD_FAR_SETTLE, HUD_FAR_SPEED, HUD_NEAR_RETURN, MARK, ATTACK, SLASH, SLASH_RESOLVED, MINE_AIM, MINING, PLACE_AIM, PLACING, DEAD, EXIT, RESTORED, REAL_PLACE_AIM, REAL_PLACE, REAL_PLACE_DONE, CREATIVE_PICK, CREATIVE_REJECT, CREATIVE_EXIT, CREATIVE_TAKE, CREATIVE_PLACE_AIM, CREATIVE_PLACE, CREATIVE_DONE }
+    private enum Step { WORLD, SETUP, BASELINE, ENTER, FROZEN, ORB_VIEW, ORB_RETURN, BE_RELOAD, VISION_RESIZE, VISION_RELOAD, VISION_FABULOUS, ORB_RELOADED, ORB_DISTANCE, ORB_RESTORED, BLADE_LEFT, BLADE_THIRD, BLADE_OFFHAND, BLADE_SWING, HUD_QUARTER, HUD_ZERO, HUD_HIDDEN, HUD_RESTORED, HUD_NEAR_SPEED, HUD_FAR_SETTLE, HUD_FAR_SPEED, HUD_NEAR_RETURN, MARK, ATTACK, SLASH, SLASH_RESOLVED, MINE_AIM, MINING, PLACE_AIM, PLACING, DEAD, EXIT, RESTORED, REAL_PLACE_AIM, REAL_PLACE, REAL_PLACE_DONE, CREATIVE_PICK, CREATIVE_REJECT, CREATIVE_EXIT, CREATIVE_TAKE, CREATIVE_PLACE_AIM, CREATIVE_PLACE, CREATIVE_DONE }
     private static final Vec3 ENTRY = new Vec3(.5,100,.5), COW = new Vec3(.5,100,2.9);
     private static final BlockPos MINE = new BlockPos(1,100,2), SUPPORT = new BlockPos(-1,99,2), REAL_CHANGE = new BlockPos(3,100,2);
     private static final BlockPos REAL_SUPPORT = new BlockPos(1,99,-2);
@@ -70,6 +70,9 @@ public final class ClientVisualSmoke {
     private Step step = Step.WORLD;
     private int age;
     private boolean finished, sent;
+    private int bladeLiveFrames,bladeHandFrames,bladeWorldFrames,bladeLeftFrames;
+    private net.minecraft.world.entity.HumanoidArm bladeOriginalArm;
+    private ItemStack bladeOriginalOffhand;
     private volatile boolean serverDone;
     private volatile Throwable serverFailure;
     private UUID cowId, pigId, skeletonId, lateSpawnId;
@@ -147,6 +150,10 @@ public final class ClientVisualSmoke {
                     if(StillworldClient.active() && (age==4||age==9||age==16||age==28))shot("scan-"+age+".png");
                     if(!StillworldClient.active()||ghost==null||age<65||PsycheView.windowOpacity()<1)return;
                     require(StillworldPostEffect.settled(),"World linework shader did not finish its entry wave");
+                    require(RealityBladeRenderer.handDraws()>0,"First-person sword did not render live reality");
+                    require(RealityBladeRenderer.guiDraws()>0,"Sword inventory icon did not render");
+                    require(RealityBladeRenderer.worldDraws()>0,"Dropped sword aperture did not render after the world effect");
+                    BladeVisualChecks.check(output);
                     itemPoseChecks.check();
                     checkRadialField();
                     DistanceShaderProbe.check(output);
@@ -312,16 +319,61 @@ public final class ClientVisualSmoke {
                 case ORB_RESTORED -> {
                     aim(COW.add(0,.85,0));if(!serverDone||age<25)return;
                     PsycheHudChecks.visible(output,"hud-full",27,28);
-                    onServer(p->dev.stillworld.server.PsycheManager.setEnergy(p,25));advance(Step.HUD_QUARTER);
+                    bladeOriginalArm=mc.options.mainHand().get();bladeLeftFrames=RealityBladeRenderer.leftDraws();
+                    shot("blade-right-reloaded.png");
+                    mc.options.mainHand().set(net.minecraft.world.entity.HumanoidArm.LEFT);advance(Step.BLADE_LEFT);
+                }
+                case BLADE_LEFT -> {
+                    if(age<15)return;
+                    require(RealityBladeRenderer.leftDraws()>bladeLeftFrames,"Left-hand aperture did not render");
+                    shot("blade-left.png");
+                    bladeWorldFrames=RealityBladeRenderer.wearerDraws();
+                    onServer(p->p.connection.teleport(ENTRY.x+5,ENTRY.y,ENTRY.z,0,0));
+                    mc.options.setCameraType(net.minecraft.client.CameraType.THIRD_PERSON_BACK);advance(Step.BLADE_THIRD);
+                }
+                case BLADE_THIRD -> {
+                    if(!serverDone||age<20)return;
+                    require(RealityBladeRenderer.wearerDraws()>bladeWorldFrames,"Third-person wearer's sword did not replay a tinted aperture");
+                    shot("blade-third-person.png");
+                    mc.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
+                    mc.options.mainHand().set(bladeOriginalArm);
+                    bladeLeftFrames=RealityBladeRenderer.leftDraws();
+                    onServer(p->{
+                        p.connection.teleport(ENTRY.x,ENTRY.y,ENTRY.z,0,12);
+                        bladeOriginalOffhand=p.getOffhandItem().copy();
+                        p.setItemInHand(InteractionHand.MAIN_HAND,new ItemStack(Items.STICK));
+                        p.setItemInHand(InteractionHand.OFF_HAND,new ItemStack(ModContent.BLADE.get()));
+                        p.containerMenu.broadcastChanges();
+                    });advance(Step.BLADE_OFFHAND);
+                }
+                case BLADE_OFFHAND -> {
+                    if(!serverDone||age<20||!mc.player.getOffhandItem().is(ModContent.BLADE))return;
+                    require(RealityBladeRenderer.leftDraws()>bladeLeftFrames,"Offhand blade did not render live reality");
+                    shot("blade-offhand.png");mc.player.swing(InteractionHand.OFF_HAND);advance(Step.BLADE_SWING);
+                }
+                case BLADE_SWING -> {
+                    if(age==3)shot("blade-offhand-swing.png");
+                    if(age<15)return;
+                    onServer(p->{
+                        p.setItemInHand(InteractionHand.MAIN_HAND,new ItemStack(ModContent.BLADE.get()));
+                        p.setItemInHand(InteractionHand.OFF_HAND,bladeOriginalOffhand);p.containerMenu.broadcastChanges();
+                        dev.stillworld.server.PsycheManager.setEnergy(p,25);
+                    });advance(Step.HUD_QUARTER);
                 }
                 case HUD_QUARTER -> {
-                    if(!serverDone||age<15)return;
+                    if(!serverDone||age<15||PsycheView.windowRadius()>14)return;
                     PsycheHudChecks.visible(output,"hud-quarter",13,14);
+                    bladeLiveFrames=RealityOrbRenderer.liveFrames();bladeHandFrames=RealityBladeRenderer.handDraws();
                     onServer(p->dev.stillworld.server.PsycheManager.setEnergy(p,0));advance(Step.HUD_ZERO);
                 }
                 case HUD_ZERO -> {
-                    if(!serverDone||age<15)return;
+                    if(!serverDone||age<15||PsycheView.windowRadius()>0)return;
                     PsycheHudChecks.hidden(output,"hud-zero");
+                    require(RealityOrbRenderer.liveFrames()>bladeLiveFrames&&RealityBladeRenderer.handDraws()>bladeHandFrames,
+                            "Zero psyche / inside anchor stopped the sword's live scene");
+                    require(RealityOrbRenderer.bladeSceneReady(),"Sword reused a stale reality frame");
+                    shot("blade-zero-psyche.png");
+                    checks.add("Live sword apertures work in both hands, world items, third-person, reload and zero psyche; static GUI icon renders");
                     onServer(p->dev.stillworld.server.PsycheManager.setEnergy(p,100));
                     mc.options.hideGui=true;advance(Step.HUD_HIDDEN);
                 }
@@ -542,6 +594,8 @@ public final class ClientVisualSmoke {
         player.connection.teleport(ENTRY.x,ENTRY.y,ENTRY.z,0,12);player.setHealth(player.getMaxHealth());player.getFoodData().setFoodLevel(20);player.containerMenu.broadcastChanges();
         var cow=EntityType.COW.create(level);require(cow!=null,"Cannot spawn cow");cow.setPos(COW);cow.setNoAi(true);cow.getAttribute(Attributes.MAX_HEALTH).setBaseValue(100);cow.setHealth(100);level.addFreshEntity(cow);cowId=cow.getUUID();
         var pig=EntityType.PIG.create(level);require(pig!=null,"Cannot spawn pig");pig.setPos(-2,100,3.5);pig.setNoAi(true);level.addFreshEntity(pig);pigId=pig.getUUID();
+        var blade=new net.minecraft.world.entity.item.ItemEntity(level,2.2,101.1,2.5,new ItemStack(ModContent.BLADE.get()));
+        blade.setNoGravity(true);blade.setDeltaMovement(Vec3.ZERO);blade.setNeverPickUp();level.addFreshEntity(blade);
         var skeleton=EntityType.SKELETON.create(level);require(skeleton!=null,"Cannot spawn skeleton");skeleton.setPos(-3.5,100,6.5);skeleton.setNoAi(true);
         skeleton.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD,new ItemStack(Items.IRON_HELMET));
         skeleton.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,new ItemStack(Items.BOW));

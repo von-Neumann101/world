@@ -119,6 +119,15 @@ tasks.register('spatialShaderTest', JavaExec) {
          providers.gradleProperty('probeHeight').orElse('360').get()
 }
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+tasks.register('bladeShaderTest', JavaExec) {
+    group = 'verification'
+    dependsOn 'visualTestClasses'
+    classpath = sourceSets.visualTest.runtimeClasspath
+    mainClass = 'dev.stillworld.client.BladeShaderProbe'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    systemProperty 'stillworld.automatedClient', 'true'
+    args project.file('src/main/resources/assets/stillworld/shaders/core').absolutePath
+}
 tasks.named('jar') { manifest.attributes('Implementation-Version': project.version) }
 
 // Invisible GLSL test for the spherical live-world compositor.

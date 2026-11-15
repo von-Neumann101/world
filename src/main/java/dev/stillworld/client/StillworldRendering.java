@@ -31,12 +31,16 @@ import org.joml.Matrix4f;
 public final class StillworldRendering {
     private static final ResourceLocation WHITE = ResourceLocation.fromNamespaceAndPath(Stillworld.ID, "textures/misc/white.png");
     private static boolean renderingVisual;
+    private static boolean bladeSilhouette;
+    private static int bladeTint=-1;
     private static RenderTarget savedDepth;
     private static Matrix4f worldProjection, worldView;
     private static Vec3 worldCamera;
     private static float worldPartial;
     public record Slash(java.util.UUID id,Vec3 center, float yaw, float pitch) { }
     public static boolean visualPass() { return renderingVisual; }
+    static boolean bladeSilhouette() { return bladeSilhouette; }
+    static int bladeTint() { return bladeTint; }
 
     /** Cancel at the dispatcher before renderer layers, names, shadows, or debug hitboxes run. */
     public static boolean hideOriginal(Entity entity) {
@@ -80,6 +84,7 @@ public final class StillworldRendering {
             StillworldPostEffect.render(event);
             afterPostEffect(event);
             RealityOrbRenderer.render(event);
+            RealityBladeRenderer.renderWorldWindows();
             StillworldPostEffect.renderSpatial();
             RealityOrbRenderer.renderHud();
             return;
@@ -216,6 +221,7 @@ public final class StillworldRendering {
     }
 
     public static void clear() {
+        RealityBladeRenderer.clear();
         if (savedDepth != null) { savedDepth.destroyBuffers(); savedDepth = null; }
         worldProjection = worldView = null;
     }
@@ -235,6 +241,10 @@ public final class StillworldRendering {
         Vec3 offset = renderer.getRenderOffset(entity, partial);
         pose.translate(x - camera.x + offset.x, y - camera.y + offset.y, z - camera.z + offset.z);
         boolean previous = renderingVisual;
+        boolean previousBladeSilhouette=bladeSilhouette;
+        int previousBladeTint=bladeTint;
+        bladeSilhouette=silhouette;
+        bladeTint=tint;
         renderingVisual = true;
         try {
             MultiBufferSource target = buffers;
@@ -262,6 +272,8 @@ public final class StillworldRendering {
                     tint == -1 || afterimage ? dispatcher.getPackedLightCoords(entity, partial) : LightTexture.FULL_BRIGHT);
         } finally {
             renderingVisual = previous;
+            bladeSilhouette=previousBladeSilhouette;
+            bladeTint=previousBladeTint;
             pose.popPose();
         }
     }

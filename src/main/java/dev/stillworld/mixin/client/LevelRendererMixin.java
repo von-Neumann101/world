@@ -13,6 +13,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(LevelRenderer.class)
 public abstract class LevelRendererMixin {
     @Shadow private ClientLevel level;
+    @Inject(method = "renderLevel", at = @At("HEAD"))
+    private void stillworld$beginBladeFrame(CallbackInfo ci) {
+        if (!RealityWorld.isMirror(level)) dev.stillworld.client.RealityBladeRenderer.beginWorldFrame();
+    }
     @Inject(method = {"tick", "tickRain"}, at = @At("HEAD"), cancellable = true)
     private void stillworld$freezeCloudAndRainTime(CallbackInfo ci) { if (StillworldClient.active() && !RealityWorld.isMirror(level)) ci.cancel(); }
     @ModifyVariable(method = {"renderClouds", "renderSnowAndRain", "renderSky"}, at = @At("HEAD"), argsOnly = true, ordinal = 0)
