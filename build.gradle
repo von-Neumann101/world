@@ -42,6 +42,10 @@ neoForge {
             programArgument '--quickPlaySingleplayer'
             programArgument 'StillworldSmoke'
             systemProperty 'stillworld.visualTest.auto', 'true'
+            if (providers.gradleProperty('entryProfile').isPresent()) {
+                systemProperty 'stillworld.entryProfile', 'true'
+                jvmArgument '-XX:FlightRecorderOptions=repository=' + project.file('run/jfr').absolutePath
+            }
             systemProperty 'stillworld.visualTest.output', project.file(providers.gradleProperty('visualEvidence').orElse("docs/verification/visual-client-${project.mod_version}").get()).absolutePath
         }
         multiplayerHost {
@@ -93,6 +97,12 @@ tasks.register('regressionTest', JavaExec) {
 }
 tasks.named('test') { dependsOn 'regressionTest' }
 tasks.named('check') { dependsOn 'regressionTest' }
+
+tasks.named('runVisualClient') {
+    doFirst {
+        if (providers.gradleProperty('entryProfile').isPresent()) project.file('run/jfr').mkdirs()
+    }
+}
 
 // Runs only an invisible OpenGL context. No Minecraft window, input capture or test world.
 tasks.register('spatialShaderTest', JavaExec) {

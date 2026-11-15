@@ -45,6 +45,7 @@ public final class RealityWorld {
     // Bounded allocation, reused between sessions just like Minecraft's own render buffers.
     private static RenderBuffers buffers;
     private static int viewRadius;
+    private static boolean allocatingSections;
 
     private RealityWorld() { }
 
@@ -53,8 +54,7 @@ public final class RealityWorld {
         var minecraft = Minecraft.getInstance();
         if (minecraft.getConnection() == null) return;
         if (buffers == null) buffers = new RenderBuffers(1);
-        var newRenderer = new LevelRenderer(minecraft, minecraft.getEntityRenderDispatcher(),
-                minecraft.getBlockEntityRenderDispatcher(), buffers);
+        var newRenderer = new MirrorRenderer(minecraft, buffers);
         var originalData = source.getLevelData();
         var data = new ClientLevel.ClientLevelData(originalData.getDifficulty(), originalData.isHardcore(),
                 originalData.getClearColorScale() == 1.0F);
@@ -78,7 +78,8 @@ public final class RealityWorld {
             newLevel.setRainLevel(source.getRainLevel(1));
             newLevel.setThunderLevel(source.getThunderLevel(1));
             updateViewCenter(newLevel);
-            newRenderer.onResourceManagerReload(minecraft.getResourceManager());
+            // Post chains belong to the orb's offscreen target. They are initialized
+            // once by drawReality, while that target is active, not against the main view here.
             newRenderer.setLevel(newLevel);
         } catch (RuntimeException | Error failure) {
             session = null;
@@ -165,6 +166,20 @@ public final class RealityWorld {
     public static RenderBuffers buffers() { return buffers; }
 
     public static boolean isMirror(Level level) { return level instanceof MirrorLevel; }
+
+    /** Only the mirror's view-area construction defers empty GPU mesh handles. */
+    public static boolean deferVertexBuffers() { return allocatingSections; }
+
+    private static final class MirrorRenderer extends LevelRenderer {
+        private MirrorRenderer(Minecraft minecraft, RenderBuffers buffers) {
+            super(minecraft,minecraft.getEntityRenderDispatcher(),minecraft.getBlockEntityRenderDispatcher(),buffers);
+        }
+        @Override public void allChanged() {
+            boolean previous=allocatingSections;
+            allocatingSections=true;
+            try {super.allChanged();} finally {allocatingSections=previous;}
+        }
+    }
 
     private static void disposeRenderer(LevelRenderer oldRenderer) {
         try {

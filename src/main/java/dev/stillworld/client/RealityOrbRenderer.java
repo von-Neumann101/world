@@ -26,7 +26,7 @@ public final class RealityOrbRenderer {
     private static Vec3 center;
     private static RenderTarget reality, sceneDepth;
     private static PostChain compositor;
-    private static boolean rendering, failed, rebuild=true;
+    private static boolean rendering, failed, rebuild=true, refreshChunks;
     private static GraphicsStatus graphics;
     private static int renderedFrames;
     private static int viewDistance;
@@ -36,9 +36,16 @@ public final class RealityOrbRenderer {
     static Vec3 center(){return center;}
     static int renderedFrames(){return renderedFrames;}
     static RenderTarget scene(){return reality;}
-    static void begin(Vec3 entry){clear();center=entry.add(0,1,0);animationStart=System.nanoTime();}
+    static void begin(Vec3 entry){
+        clear();center=entry.add(0,1,0);animationStart=System.nanoTime();
+        // Match the view area just built by RealityWorld.begin, even before first visibility.
+        var options=Minecraft.getInstance().options;
+        graphics=options.graphicsMode().get();viewDistance=options.getEffectiveRenderDistance();
+    }
     static void registerReloads(RegisterClientReloadListenersEvent event) {
-        event.registerReloadListener((ResourceManagerReloadListener)resources->{releaseTargets();failed=false;rebuild=true;});
+        event.registerReloadListener((ResourceManagerReloadListener)resources->{
+            releaseTargets();failed=false;rebuild=true;refreshChunks=RealityWorld.level()!=null;
+        });
     }
 
     static void render(RenderLevelStageEvent event) {
@@ -102,9 +109,14 @@ public final class RealityOrbRenderer {
             if(rebuild||graphics!=mc.options.graphicsMode().get()||viewDistance!=mc.options.getEffectiveRenderDistance()) {
                 // Vanilla post chains capture their main target at creation, including
                 // Fabulous. Rebuild only while our offscreen target is the active one.
-                renderer.onResourceManagerReload(mc.getResourceManager());renderer.allChanged();
+                // setLevel already built the initial view area. Resize/first visibility
+                // need only post targets. Keep view-distance rebuilds here so Fabulous'
+                // new targets are resized to the orb before renderLevel uses them.
+                if(refreshChunks||(graphics!=null&&(graphics!=mc.options.graphicsMode().get()
+                        ||viewDistance!=mc.options.getEffectiveRenderDistance())))renderer.allChanged();
+                renderer.onResourceManagerReload(mc.getResourceManager());
                 renderer.resize(reality.width,reality.height);
-                graphics=mc.options.graphicsMode().get();viewDistance=mc.options.getEffectiveRenderDistance();rebuild=false;
+                graphics=mc.options.graphicsMode().get();viewDistance=mc.options.getEffectiveRenderDistance();rebuild=false;refreshChunks=false;
             }
             reality.bindWrite(true);RenderSystem.enableDepthTest();RenderSystem.depthMask(true);
             stack.identity();RenderSystem.applyModelViewMatrix();
@@ -152,7 +164,7 @@ public final class RealityOrbRenderer {
         if(reality!=null){reality.destroyBuffers();reality=null;}
         if(sceneDepth!=null){sceneDepth.destroyBuffers();sceneDepth=null;}
     }
-    static void clear(){releaseTargets();center=null;rendering=false;failed=false;rebuild=true;graphics=null;renderedFrames=0;}
+    static void clear(){releaseTargets();center=null;rendering=false;failed=false;rebuild=true;refreshChunks=false;graphics=null;renderedFrames=0;}
     private static final class LiveCamera extends Camera {
         LiveCamera(Camera original,float partial) {
             setup(RealityWorld.level(),original.getEntity(),original.isDetached(),false,partial);

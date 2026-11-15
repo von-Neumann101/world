@@ -80,6 +80,7 @@ public final class ClientVisualSmoke {
     private int ghostTick, liveTick;
     private int originalWidth,originalHeight;
     private int originalRenderDistance;
+    private int firstOrbDistance;
     private java.util.concurrent.CompletableFuture<Void> reload;
     private net.minecraft.client.GraphicsStatus originalGraphics;
 
@@ -146,6 +147,7 @@ public final class ClientVisualSmoke {
                     DistanceShaderProbe.check(output);
                     checks.add("Actual shader retained near atmosphere, deepened distant shadows and preserved pale sky layering");
                     require(RealityWorld.level()!=null && RealityWorld.level()!=mc.level,"Live orb world was not independent");
+                    MirrorBufferChecks.check(false);
                     ghostTick=ghost.tickCount;liveTick=live(cowId).tickCount;frozenTime=mc.level.getGameTime();frozenModel=ClientPose.capture(ghost);
                     for(var entry:originalBlockEntities.entrySet())require(mc.level.getBlockEntity(entry.getKey())!=entry.getValue(),"Entry did not exercise chunk replacement for "+entry.getKey());
                     blockEntityPose=readBlockEntityPose();
@@ -196,6 +198,11 @@ public final class ClientVisualSmoke {
                     checks.add("Player off-hand pose survived capture and thirty vanilla Elytra render-model updates preserved its recorded wing angles");
                     checks.add("Snapshot model/time/terrain froze while live entity ticks and positions continued independently");
                     shot("03-live-white-projection.png");
+                    // Change options while the orb has never been visible: its initial
+                    // renderer state must still be tracked before the first offscreen draw.
+                    firstOrbDistance=mc.options.renderDistance().get();
+                    mc.options.renderDistance().set(firstOrbDistance==8?10:8);
+                    mc.options.graphicsMode().set(net.minecraft.client.GraphicsStatus.FABULOUS);mc.levelRenderer.allChanged();
                     onServer(p->{
                         for(int x=-1;x<=1;x++)for(int y=100;y<=102;y++)p.serverLevel().setBlockAndUpdate(new BlockPos(x,y,4),Blocks.CYAN_CONCRETE.defaultBlockState());
                         p.connection.teleport(ENTRY.x,ENTRY.y,ENTRY.z-6,0,0);
@@ -206,9 +213,15 @@ public final class ClientVisualSmoke {
                     aim(ENTRY.add(0,1,0));
                     if(serverDone&&age==60)shot("orb-boundary-earlier.png");
                     if(!serverDone||age<100)return;
-                    checkOrb("orb-fancy.png");checkRadialField();
+                    checkOrb("orb-first-options.png");checkRadialField();MirrorBufferChecks.check(true);
+                    var firstTarget=RealityWorld.renderer().getTranslucentTarget();
+                    require(firstTarget!=null&&firstTarget.width==RealityOrbRenderer.scene().width
+                            &&firstTarget.height==RealityOrbRenderer.scene().height,"Pre-first-draw option change lost orb-sized Fabulous targets");
+                    checks.add("Lazy mirror buffers remain unallocated until use; rendered layers upload normally, including options changed before first visibility");
                     require(lateRealityFrames>0,"Post-entry creature never rendered in the live orb while phased");
                     checks.add("Post-entry creature is hidden in Stillworld but still renders in the live orb before exit");
+                    mc.options.renderDistance().set(firstOrbDistance);firstOrbDistance=0;
+                    mc.options.graphicsMode().set(net.minecraft.client.GraphicsStatus.FANCY);mc.levelRenderer.allChanged();
                     onServer(p->p.connection.teleport(ENTRY.x,ENTRY.y,ENTRY.z,0,0));advance(Step.ORB_RETURN);
                 }
                 case ORB_RETURN -> {
@@ -644,6 +657,7 @@ public final class ClientVisualSmoke {
     private static void require(boolean condition,String message){if(!condition)throw new AssertionError(message);}
     private void finish(Throwable failure){
         if(originalGraphics!=null)Minecraft.getInstance().options.graphicsMode().set(originalGraphics);
+        if(firstOrbDistance>0)Minecraft.getInstance().options.renderDistance().set(firstOrbDistance);
         if(originalRenderDistance>0)Minecraft.getInstance().options.renderDistance().set(originalRenderDistance);
         if(finished)return;finished=true;var mc=Minecraft.getInstance();mc.options.keyAttack.setDown(false);mc.options.keyUse.setDown(false);
         try {Files.createDirectories(output);Files.writeString(output.resolve("result.txt"),(failure==null?"PASS":"FAIL at "+step+": "+failure)+"\n"+String.join("\n",checks)+"\n");

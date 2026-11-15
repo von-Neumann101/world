@@ -60,6 +60,7 @@
     "client.VanillaModelMixins$ArmadilloPose",
     "client.RealityBiomeAccessor",
     "client.RealityLevelRendererAccessor",
+    "client.MirrorVertexBufferMixin",
     "client.RealityMinecraftAccessor",
     "client.RealityChunkLightMixin",
     "client.RealityLightAccessor"
