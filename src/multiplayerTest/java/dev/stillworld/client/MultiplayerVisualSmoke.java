@@ -54,6 +54,9 @@ public final class MultiplayerVisualSmoke {
     private boolean finished, configured;
     private int age, ordinaryFrames, visualFrames, nameFrames, frameVisuals;
     private float frameMinX=Float.POSITIVE_INFINITY,frameMaxX=Float.NEGATIVE_INFINITY;
+    private float previousMinX=Float.NaN,previousMaxX=Float.NaN;
+    private int positionJumps,lastInsideSampleAge=-1;
+    private boolean insideOriginalSeen,insideBlackWhiteSeen;
     private boolean opaqueBlockEntitiesReady;
     private long observerFrozenTime;
 
@@ -275,10 +278,11 @@ public final class MultiplayerVisualSmoke {
             }
             case "WEARER_SAMPLE" -> {
                 if (age < 40 || !colors[0] || !colors[1] || !colors[2]) return;
+                require(positionJumps>=3,"Stationary player's echoes did not jump between nearby positions: "+positionJumps);
                 require(StillworldRendering.hideOriginal(host), "Equipped Observer leaked the host ordinary renderer");
                 require(ordinaryFrames == 0 && nameFrames == 0 && visualFrames > 0,
                         "Wearer must see visual-pass body only; ordinary=" + ordinaryFrames + ", visual=" + visualFrames + ", names=" + nameFrames);
-                checks.add("Equipped Observer sees three simultaneous displaced translucent bodies with continuous visibility changes; no ordinary name/shadow dispatcher");
+                checks.add("Equipped Observer sees exactly two displaced bodies per frame; stationary-player position jumps="+positionJumps+"; no ordinary name/shadow dispatcher");
                 write("observer-state.txt", "WEARER_DONE"); advance("WAIT_INSIDE");
             }
             case "WAIT_INSIDE" -> {
@@ -289,14 +293,17 @@ public final class MultiplayerVisualSmoke {
                 advance("INSIDE_SAMPLE");
             }
             case "INSIDE_SAMPLE" -> {
-                if (age < 40 || !insideColors[0] || !insideColors[1] || !insideColors[2]) return;
+                if (age < 40 || !insideColors[0] || !insideColors[1] || !insideColors[2]
+                        || !insideOriginalSeen || !insideBlackWhiteSeen) return;
+                require(positionJumps>=3,"Inside echoes did not flicker between nearby positions: "+positionJumps);
+                require(insideOriginalSeen&&insideBlackWhiteSeen,"Original skin must appear and disappear as the selected pair changes");
                 require(StillworldClient.active() && monochromeLoaded(), "Observer did not remain inside with monochrome processing");
                 require(mc.level.getGameTime() == observerFrozenTime, "Observer's own frozen environment time advanced");
                 require(StillworldClient.phased(host) && StillworldRendering.hideOriginal(host), "Inside Observer leaked host ordinary renderer");
                 require(ordinaryFrames == 0 && nameFrames == 0 && visualFrames > 0,
                         "Post-monochrome host body must use only visual pass; ordinary=" + ordinaryFrames + ", visual=" + visualFrames + ", names=" + nameFrames);
                 require(mc.options.entityShadows().get(), "Shadow rendering must remain enabled during inside sample");
-                checks.add("Observer entered its own real session: frozen monochrome background/ground plus overlapping post-effect residuals, original skin color preserved, no ordinary names/shadow dispatcher");
+                checks.add("Observer entered its own real session: frozen monochrome background/ground, exactly two flickering residuals, original skin both present and absent; position jumps="+positionJumps);
                 write("observer-state.txt", "INSIDE_DONE"); advance("WAIT_OBSERVER_OUT");
             }
             case "WAIT_OBSERVER_OUT" -> {
@@ -351,8 +358,10 @@ public final class MultiplayerVisualSmoke {
         if (!role.equals("observer") || finished)return;
         try {
             if(stage.equals("WEARER_SAMPLE")||stage.equals("INSIDE_SAMPLE")) {
-                require(frameVisuals==3,"Expected three simultaneous afterimage bodies, got "+frameVisuals);
+                require(frameVisuals==2,"Expected exactly two simultaneous afterimage bodies, got "+frameVisuals);
                 require(frameMaxX-frameMinX>.12,"Afterimage bodies overlap without any visible lateral separation");
+                if(Float.isFinite(previousMinX)&&Math.max(Math.abs(frameMinX-previousMinX),Math.abs(frameMaxX-previousMaxX))>.075)positionJumps++;
+                previousMinX=frameMinX;previousMaxX=frameMaxX;
             }
             int slot=Math.min(2,age/12);
             if(stage.equals("WEARER_SAMPLE")&&!colors[slot]) {
@@ -360,7 +369,8 @@ public final class MultiplayerVisualSmoke {
             }
             if(!stage.equals("INSIDE_SAMPLE"))return;
             require(StillworldClient.active() && monochromeLoaded(), "Post-effect capture requires Observer's own monochrome session");
-            if (!insideColors[slot]) {
+            if (age!=lastInsideSampleAge && age%2==0) {
+                lastInsideSampleAge=age;
                 try (var image = Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
                     // Fixed camera and scene: these side patches are the green/red wall;
                     // the lower patch is ground; the center patch is the Host's body.
@@ -368,10 +378,15 @@ public final class MultiplayerVisualSmoke {
                     double ground = chroma(image, .38, .75, .42, .82);
                     double coloredBody = coloredFraction(image, .48, .35, .52, .55);
                     require(wall < 4 && ground < 4, "Observer environment was not monochrome: wall=" + wall + ", ground=" + ground);
-                    require(coloredBody > .1, "Original-color Host residual was desaturated by post-processing: fraction=" + coloredBody);
-                    image.writeToFile(output.resolve("0" + (slot + 6) + "-inside-overlap.png"));
-                    checks.add("Inside slot " + slot + " pixel evidence: wall chroma=" + wall + ", ground chroma=" + ground + ", colored body fraction=" + coloredBody);
-                    insideColors[slot] = true;
+                    if(coloredBody>.1)insideOriginalSeen=true;
+                    if(coloredBody<.02&&!insideBlackWhiteSeen) {
+                        image.writeToFile(output.resolve("11-inside-black-white.png"));insideBlackWhiteSeen=true;
+                    }
+                    if(!insideColors[slot]) {
+                        image.writeToFile(output.resolve("0" + (slot + 6) + "-inside-overlap.png"));
+                        checks.add("Inside slot " + slot + " pixel evidence: wall chroma=" + wall + ", ground chroma=" + ground + ", colored body fraction=" + coloredBody);
+                        insideColors[slot]=true;
+                    }
                 }
             }
         } catch (Throwable exception) { failure = exception; }
@@ -472,6 +487,7 @@ public final class MultiplayerVisualSmoke {
 
     private void advance(String next) {
         stage = next; age = ordinaryFrames = visualFrames = nameFrames = 0;
+        positionJumps=0;previousMinX=previousMaxX=Float.NaN;
         System.out.println("STILLWORLD MULTIPLAYER " + role + " " + next);
     }
 

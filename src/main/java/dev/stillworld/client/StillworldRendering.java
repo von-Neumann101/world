@@ -116,28 +116,40 @@ public final class StillworldRendering {
     private static void renderPhasedPlayers(PoseStack pose, MultiBufferSource buffers, Vec3 camera, float partial) {
         var mc = Minecraft.getInstance();
         if (mc.player != null && mc.level != null && ModContent.equippedRank(mc.player) != null) {
-            double seconds=System.nanoTime()*1e-9;
+            long now=System.nanoTime();
             for (var player : mc.level.players()) {
                 if (!StillworldClient.phased(player) || (player == mc.player && mc.options.getCameraType().isFirstPerson())) continue;
                 if (player.distanceToSqr(camera) >= 16384)continue;
                 var position=new Vec3(Mth.lerp(partial,player.xOld,player.getX()),Mth.lerp(partial,player.yOld,player.getY()),Mth.lerp(partial,player.zOld,player.getZ()));
                 var right=new Vec3(camera.z-position.z,0,position.x-camera.x);
                 right=right.lengthSqr()<.0001?new Vec3(1,0,0):right.normalize();
-                // A bounded recent-motion offset adds short trailing echoes without retaining entities/history.
-                var movement=player.position().subtract(player.xOld,player.yOld,player.zOld);
-                var trail=movement.lengthSqr()>4?Vec3.ZERO:movement.scale(2.5);
-                if(trail.lengthSqr()>.42*.42)trail=trail.normalize().scale(.42);
-                double phase=(player.getUUID().hashCode()&1023)*Math.PI*2/1024;
-                var dark=right.scale(-.14-.025*Math.sin(seconds*1.9+phase)).subtract(trail)
-                        .add(0,.025*Math.sin(seconds*1.7+phase),0);
-                var gray=right.scale(.14+.03*Math.sin(seconds*1.6+phase+2.2)).subtract(trail.scale(.55))
-                        .add(0,.018*Math.sin(seconds*2.1+phase+1),0);
-                // Three bodies remain visible together; their opacity changes smoothly and out of phase.
-                drawAfterimage(player,partial,camera,pose,buffers,dark,withAlpha(0x161A1E,.08+.02*Math.sin(seconds*3.6+phase+4.2)),true);
-                drawAfterimage(player,partial,camera,pose,buffers,gray,withAlpha(0xA4AAAE,.13+.03*Math.sin(seconds*4.2+phase+2.1)),true);
-                drawAfterimage(player,partial,camera,pose,buffers,Vec3.ZERO,withAlpha(0xFFFFFF,.24+.04*Math.sin(seconds*3.8+phase)),false);
+                var forward=new Vec3(-right.z,0,right.x);
+                long seed=player.getUUID().getMostSignificantBits()^player.getUUID().getLeastSignificantBits();
+                long pulse=(now+(seed&0x7FFFFFFL))/110_000_000L;
+                long pattern=flickerBits(seed+pulse*0x9E3779B97F4A7C15L);
+                // Omit exactly one of original/black/white for this entire draw. No crossfade third body.
+                int omitted=(int)Long.remainderUnsigned(pattern,3);
+                double side=(pattern&8)==0?1:-1;
+                for(int kind=1;kind<=2;kind++) {
+                    if(kind==omitted)continue;
+                    long noise=flickerBits(pattern+kind*0x9E3779B97F4A7C15L);
+                    double lateral=(.18+.20*(noise&255)/255.0)*side*(kind==1?-1:1);
+                    var offset=right.scale(lateral).add(forward.scale(.20*((noise>>>16)&255)/255.0-.10))
+                            .add(0,.14*((noise>>>8)&255)/255.0-.07,0);
+                    double alpha=.10+.10*((noise>>>24)&255)/255.0;
+                    drawAfterimage(player,partial,camera,pose,buffers,offset,withAlpha(kind==1?0x101010:0xFFFFFF,alpha),true);
+                }
+                if(omitted!=0)drawAfterimage(player,partial,camera,pose,buffers,Vec3.ZERO,
+                        withAlpha(0xFFFFFF,.22+.12*((pattern>>>32)&255)/255.0),false);
             }
         }
+    }
+
+    /** Repeatable abrupt changes per player/pulse, independent of frozen world ticks and render FPS. */
+    private static long flickerBits(long value) {
+        value=(value^(value>>>30))*0xBF58476D1CE4E5B9L;
+        value=(value^(value>>>27))*0x94D049BB133111EBL;
+        return value^(value>>>31);
     }
 
     private static int withAlpha(int rgb,double opacity){return ((int)Math.round(opacity*255)<<24)|rgb;}
