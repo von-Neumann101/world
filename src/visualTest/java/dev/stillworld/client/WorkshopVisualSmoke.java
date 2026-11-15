@@ -65,7 +65,7 @@ public final class WorkshopVisualSmoke {
                     if(!serverDone||age<80)return;
                     int count=0;for(var pos:auxiliaries())if(mc.level.getBlockEntity(pos) instanceof AuxiliaryBlockEntity be&&be.biomeIndex()>=0)count++;
                     require(count==8,"All8miniature scenes must sync to realclient");
-                    MiniatureGeometryChecks.verify();checks.add("Nether shroomlights and ocean water sides have no overlapping solid geometry planes");
+                    MiniatureGeometryChecks.verify();checks.add("Shroomlights embedded without overlap; chorus flowers join centered connected stems; ocean edges remain separate");
                     var models=mc.getBlockRenderer().getBlockModelShaper();var missing=mc.getModelManager().getMissingModel();
                     for(var block:List.of(WorkshopContent.ORE.get(),WorkshopContent.DEEPSLATE_ORE.get(),WorkshopContent.STABILIZER.get(),WorkshopContent.OVERWORLD_AUXILIARY.get(),WorkshopContent.NETHER_AUXILIARY.get(),WorkshopContent.END_AUXILIARY.get(),ModContent.TREATMENT_MACHINE.get()))
                         for(var state:block.getStateDefinition().getPossibleStates())require(models.getBlockModel(state)!=missing,"Missing block model: "+state);
@@ -119,6 +119,18 @@ public final class WorkshopVisualSmoke {
                     if(!serverDone)return;
                     if(age==30)shot("07-crimson-close-a.png");
                     if(age<50)return;shot("08-crimson-close-b.png");
+                    server(p->p.connection.teleport(20.5,100.8,-5,0,37));next();
+                }
+                case 11->{
+                    if(!serverDone||age<30)return;shot("09-mountain-close.png");
+                    server(p->p.connection.teleport(18.5,100.7,4.3,180,28));next();
+                }
+                case 12->{
+                    if(!serverDone||age<30)return;shot("10-highlands-close.png");
+                    server(p->p.connection.teleport(18.5,100.7,-3.8,0,27));next();
+                }
+                case 13->{
+                    if(!serverDone||age<30)return;shot("11-warped-close.png");
                     mc.options.hideGui=false;mc.options.fov().set(70);finish(null);
                 }
                 default->{}

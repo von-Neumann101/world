@@ -3,6 +3,7 @@ package dev.stillworld.client;
 import dev.stillworld.client.workshop.BiomeMiniatureRenderer;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.AABB;
 import java.util.List;
 import java.util.ArrayList;
@@ -16,16 +17,40 @@ final class MiniatureGeometryChecks {
     static void verify() throws ReflectiveOperationException {
         var field=BiomeMiniatureRenderer.class.getDeclaredField("SCENES");field.setAccessible(true);
         var scenes=(List<?>)field.get(null);
+        var attachmentErrors=new ArrayList<String>();
         for(int biome:new int[]{4,5}) {
             var pieces=(List<?>)scenes.get(biome);int lamps=0;
             for(var piece:pieces)if(state(piece).is(Blocks.SHROOMLIGHT)) {
-                lamps++;var lamp=box(piece);
-                for(var other:pieces)if(other!=piece&&lamp.intersects(box(other)))
-                    throw new AssertionError("Biome "+biome+" shroomlight overlaps "+state(other)+"; shared surfaces cause flicker");
+                lamps++;var lamp=box(piece);int canopyContacts=0;
+                for(var other:pieces)if(other!=piece) {
+                    var bounds=box(other);
+                    if(lamp.deflate(1e-5).intersects(bounds))attachmentErrors.add("Biome "+biome+" shroomlight intersects "+state(other));
+                    if((state(other).is(Blocks.WARPED_WART_BLOCK)||state(other).is(Blocks.NETHER_WART_BLOCK))&&touches(lamp,bounds))canopyContacts++;
+                }
+                if(canopyContacts<3)attachmentErrors.add("Biome "+biome+" shroomlight must be embedded in the canopy, not detached below it");
             }
             if(lamps==0)throw new AssertionError("Nether miniature lost its shroomlight");
         }
+        var highlands=(List<?>)scenes.get(7);
+        for(var flower:highlands)if(state(flower).is(Blocks.CHORUS_FLOWER)) {
+            var head=box(flower);boolean joined=false;
+            for(var plant:highlands)if(state(plant).is(Blocks.CHORUS_PLANT)) {
+                var stem=box(plant);
+                if(Math.abs(stem.maxY-head.minY)<1e-5&&Math.abs(stem.getCenter().x-head.getCenter().x)<1e-5
+                        &&Math.abs(stem.getCenter().z-head.getCenter().z)<1e-5&&state(plant).getValue(BlockStateProperties.UP))joined=true;
+            }
+            if(!joined)attachmentErrors.add("Chorus flower must meet a centered upward-connected stem at "+head);
+        }
+        if(!attachmentErrors.isEmpty())throw new AssertionError(String.join("; ",attachmentErrors));
         verifyWaterFaces((List<?>)scenes.get(2));
+    }
+    private static boolean touches(AABB a,AABB b) {
+        boolean xOverlap=Math.min(a.maxX,b.maxX)-Math.max(a.minX,b.minX)>1e-5;
+        boolean yOverlap=Math.min(a.maxY,b.maxY)-Math.max(a.minY,b.minY)>1e-5;
+        boolean zOverlap=Math.min(a.maxZ,b.maxZ)-Math.max(a.minZ,b.minZ)>1e-5;
+        return (yOverlap&&zOverlap&&(Math.abs(a.maxX-b.minX)<1e-5||Math.abs(b.maxX-a.minX)<1e-5))
+                ||(xOverlap&&zOverlap&&(Math.abs(a.maxY-b.minY)<1e-5||Math.abs(b.maxY-a.minY)<1e-5))
+                ||(xOverlap&&yOverlap&&(Math.abs(a.maxZ-b.minZ)<1e-5||Math.abs(b.maxZ-a.minZ)<1e-5));
     }
     private static void verifyWaterFaces(List<?> terrain) throws ReflectiveOperationException {
         var consumer=new WaterVertices();
