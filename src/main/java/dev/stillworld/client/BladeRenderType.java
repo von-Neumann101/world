@@ -25,7 +25,7 @@ final class BladeRenderType extends RenderType {
                         private int previous;
                         @Override public void setupRenderState(){
                             super.setupRenderState();previous=RenderSystem.getShaderTexture(1);
-                            RenderSystem.setShaderTexture(1,RealityOrbRenderer.scene().getColorTextureId());
+                            RenderSystem.setShaderTexture(1,RealityBladeRenderer.scene().getColorTextureId());
                         }
                         @Override public void clearRenderState(){RenderSystem.setShaderTexture(1,previous);super.clearRenderState();}
                     })

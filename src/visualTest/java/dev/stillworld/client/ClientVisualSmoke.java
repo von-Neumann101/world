@@ -57,7 +57,7 @@ import java.util.function.Consumer;
 /** Exclusive development source set; no world-writing test code is shipped in the main jar. */
 @Mod(value = Stillworld.ID, dist = Dist.CLIENT)
 public final class ClientVisualSmoke {
-    private enum Step { WORLD, SETUP, BASELINE, ENTER, FROZEN, ORB_VIEW, ORB_RETURN, BE_RELOAD, VISION_RESIZE, VISION_RELOAD, VISION_FABULOUS, ORB_RELOADED, ORB_DISTANCE, ORB_RESTORED, BLADE_LEFT, BLADE_THIRD, BLADE_OFFHAND, BLADE_SWING, HUD_QUARTER, HUD_ZERO, HUD_HIDDEN, HUD_RESTORED, HUD_NEAR_SPEED, HUD_FAR_SETTLE, HUD_FAR_SPEED, HUD_NEAR_RETURN, MARK, ATTACK, SLASH, SLASH_RESOLVED, MINE_AIM, MINING, PLACE_AIM, PLACING, DEAD, EXIT, RESTORED, REAL_PLACE_AIM, REAL_PLACE, REAL_PLACE_DONE, CREATIVE_PICK, CREATIVE_REJECT, CREATIVE_EXIT, CREATIVE_TAKE, CREATIVE_PLACE_AIM, CREATIVE_PLACE, CREATIVE_DONE }
+    private enum Step { WORLD, SETUP, BASELINE, ENTER, FROZEN, ORB_VIEW, ORB_RETURN, BE_RELOAD, VISION_RESIZE, VISION_RELOAD, VISION_FABULOUS, ORB_RELOADED, ORB_DISTANCE, ORB_RESTORED, BLADE_LEFT, BLADE_THIRD, BLADE_OFFHAND, BLADE_SWING, HUD_QUARTER, HUD_ZERO, HUD_HIDDEN, HUD_RESTORED, HUD_NEAR_SPEED, HUD_FAR_SETTLE, HUD_FAR_SPEED, HUD_NEAR_RETURN, MARK, ATTACK, SLASH, SLASH_RESOLVED, MINE_AIM, MINING, PLACE_AIM, PLACING, DEAD, EXIT_SWORD, EXIT, RESTORED, REAL_PLACE_AIM, REAL_PLACE, REAL_PLACE_DONE, CREATIVE_PICK, CREATIVE_REJECT, CREATIVE_EXIT, CREATIVE_TAKE, CREATIVE_PLACE_AIM, CREATIVE_PLACE, CREATIVE_DONE }
     private static final Vec3 ENTRY = new Vec3(.5,100,.5), COW = new Vec3(.5,100,2.9);
     private static final BlockPos MINE = new BlockPos(1,100,2), SUPPORT = new BlockPos(-1,99,2), REAL_CHANGE = new BlockPos(3,100,2);
     private static final BlockPos REAL_SUPPORT = new BlockPos(1,99,-2);
@@ -468,9 +468,15 @@ public final class ClientVisualSmoke {
                 case DEAD -> {
                     if(!serverDone||age<30||!StillworldClient.isDead(pigId))return;
                     shot("05-edits-and-white-death-smoke.png");checks.add("A real death removed the frozen body and enabled white smoke");
+                    onServer(p->{p.getInventory().selected=0;p.connection.send(new ClientboundSetCarriedItemPacket(0));});
+                    advance(Step.EXIT_SWORD);
+                }
+                case EXIT_SWORD -> {
+                    if(!serverDone||age<12||!mc.player.getMainHandItem().is(ModContent.BLADE))return;
                     click("key.stillworld.toggle");advance(Step.EXIT);
                 }
                 case EXIT -> {
+                    if(StillworldExitEffect.active()&&(age==4||age==9||age==14))shot("exit-held-blade-"+age+".png");
                     if(StillworldClient.active()||age<30)return;
                     require(StillworldClient.ghosts().isEmpty(),"Exit retained snapshot entities");
                     require(!StillworldPostEffect.loaded(),"Exit retained the world linework effect");

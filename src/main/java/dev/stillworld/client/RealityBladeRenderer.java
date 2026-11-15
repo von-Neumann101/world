@@ -1,5 +1,6 @@
 package dev.stillworld.client;
 
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -64,7 +65,14 @@ public final class RealityBladeRenderer extends BlockEntityWithoutLevelRenderer 
     private static boolean solid(NativeImage image,int x,int y){return x>=0&&y>=0&&x<image.getWidth()&&y<image.getHeight()&&(image.getPixelRGBA(x,y)>>>24)>=128;}
 
     /** Called only for the main level; nested reality rendering must preserve this frame's windows. */
-    public static void beginWorldFrame(){WINDOWS.clear();RealityOrbRenderer.invalidateBladeFrame();}
+    public static void beginWorldFrame(){
+        WINDOWS.clear();RealityOrbRenderer.invalidateBladeFrame();StillworldExitEffect.invalidateBladeFrame();
+    }
+    /** The exit transition already captures the current, unfiltered world before its post-processing. */
+    static RenderTarget scene(){
+        if(StillworldClient.active())return RealityOrbRenderer.bladeSceneReady()?RealityOrbRenderer.scene():null;
+        return StillworldExitEffect.scene();
+    }
     static boolean needsReality(){
         if(!WINDOWS.isEmpty())return true;
         var mc=Minecraft.getInstance();
@@ -95,10 +103,10 @@ public final class RealityBladeRenderer extends BlockEntityWithoutLevelRenderer 
             vertex(material,pose.last(),edge.x2,edge.y2,FRONT,edge.u,edge.v,edge.nx,edge.ny,0,light,overlay);
             vertex(material,pose.last(),edge.x1,edge.y1,FRONT,edge.u,edge.v,edge.nx,edge.ny,0,light,overlay);
         }
-        // In reality these openings simply reveal the real scene already behind the sword.
-        if(!StillworldClient.active()||RealityOrbRenderer.rendering())return;
+        // After the exit transition, openings reveal the real scene already behind the sword.
+        if((!StillworldClient.active()&&!StillworldExitEffect.active())||RealityOrbRenderer.rendering())return;
         if(context.firstPerson()){
-            if(RealityOrbRenderer.bladeSceneReady()){
+            if(scene()!=null){
                 aperture(pose.last(),buffers.getBuffer(BladeRenderType.APERTURE),-1);handDraws++;
                 if(context==ItemDisplayContext.FIRST_PERSON_LEFT_HAND)leftDraws++;
             }
@@ -111,7 +119,7 @@ public final class RealityBladeRenderer extends BlockEntityWithoutLevelRenderer 
     /** Replay after world desaturation, before shared refraction, with original depth and matrices. */
     static void renderWorldWindows(){
         try{
-            if(WINDOWS.isEmpty()||!RealityOrbRenderer.bladeSceneReady())return;
+            if(WINDOWS.isEmpty()||scene()==null)return;
             var oldProjection=new Matrix4f(RenderSystem.getProjectionMatrix());
             var view=RenderSystem.getModelViewStack();view.pushMatrix();
             var buffers=Minecraft.getInstance().renderBuffers().bufferSource();

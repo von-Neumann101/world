@@ -18,9 +18,12 @@ final class StillworldExitEffect {
     private static long started;
     private static float startRadius,startOpacity,far,wave;
     private static RenderTarget live;
+    private static boolean bladeSceneReady;
     private static PostChain compositor;
 
     static boolean active(){return active;}
+    static RenderTarget scene(){return active&&bladeSceneReady?live:null;}
+    static void invalidateBladeFrame(){bladeSceneReady=false;}
     static boolean begin() {
         clear();
         if(!StillworldClient.active()||!StillworldPostEffect.loaded())return false;
@@ -39,10 +42,12 @@ final class StillworldExitEffect {
             GlStateManager._glBindFramebuffer(GL_READ_FRAMEBUFFER,main.frameBufferId);
             GlStateManager._glBindFramebuffer(GL_DRAW_FRAMEBUFFER,live.frameBufferId);
             glBlitFramebuffer(0,0,main.width,main.height,0,0,live.width,live.height,GL_COLOR_BUFFER_BIT,GL_NEAREST);
+            bladeSceneReady=true;
             main.bindWrite(true);
             StillworldPostEffect.renderExit(event);
             // The monochrome chain's final blit clears depth; refraction still needs real geometry.
             main.copyDepthFrom(sceneDepth);main.bindWrite(true);
+            RealityBladeRenderer.renderWorldWindows();
             StillworldPostEffect.renderSpatial();
             float scale=(float)mc.getWindow().getGuiScale();
             float x=PsycheView.WINDOW_X*scale,y=main.height-PsycheView.WINDOW_Y*scale;
@@ -75,7 +80,7 @@ final class StillworldExitEffect {
                 .addAuxAsset("RealitySampler",live::getColorTextureId,live.width,live.height);
         compositor.resize(main.width,main.height);
     }
-    private static void release(){if(compositor!=null){compositor.close();compositor=null;}if(live!=null){live.destroyBuffers();live=null;}}
+    private static void release(){bladeSceneReady=false;if(compositor!=null){compositor.close();compositor=null;}if(live!=null){live.destroyBuffers();live=null;}}
     static void clear(){release();active=false;started=0;}
     private static void finish(){clear();StillworldPostEffect.clear();StillworldRendering.clear();}
     private StillworldExitEffect(){}

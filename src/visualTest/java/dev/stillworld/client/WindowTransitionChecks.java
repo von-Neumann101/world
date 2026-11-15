@@ -29,9 +29,9 @@ final class WindowTransitionChecks {
                 require(StillworldClient.ghosts().isEmpty()&&RealityWorld.level()==null,"Exit animation delayed session cleanup");
                 var field=StillworldExitEffect.class.getDeclaredField("started");field.setAccessible(true);
                 float progress=(System.nanoTime()-field.getLong(null))/950_000_000f;
-                if(progress>.05f&&progress<.3f&&!exitEarly){checkLiveCenter();shot("exit-early.png");exitEarly=true;}
-                if(progress>.4f&&progress<.65f&&!exitMiddle){checkLiveCenter();shot("exit-middle.png");exitMiddle=true;}
-                if(progress>.8f&&!exitLate){checkLiveCenter();shot("exit-late.png");exitLate=true;}
+                if(progress>.05f&&progress<.3f&&!exitEarly){checkLiveCenter();checkBlade("early");shot("exit-early.png");exitEarly=true;}
+                if(progress>.4f&&progress<.65f&&!exitMiddle){checkLiveCenter();checkBlade("middle");shot("exit-middle.png");exitMiddle=true;}
+                if(progress>.8f&&!exitLate){checkLiveCenter();checkBlade("late");shot("exit-late.png");exitLate=true;}
             } else if(exitLate&&!exitFinished) {
                 require(org.lwjgl.opengl.GL11.glGetInteger(org.lwjgl.opengl.GL30.GL_DRAW_FRAMEBUFFER_BINDING)
                         ==Minecraft.getInstance().getMainRenderTarget().frameBufferId,"Exit completion lost the main framebuffer before hand rendering");
@@ -51,6 +51,10 @@ final class WindowTransitionChecks {
         require(!StillworldExitEffect.active()&&!StillworldPostEffect.loaded(),"Exit visual resources remained active");
     }
     private void checkFailure(){if(failure!=null)throw new AssertionError("Transition frame failed",failure);}
+    private void checkBlade(String stage) throws Exception {
+        var field=StillworldExitEffect.class.getDeclaredField("live");field.setAccessible(true);
+        BladeVisualChecks.checkExit(output,(RenderTarget)field.get(null),stage);
+    }
     private void checkLiveCenter() throws Exception {
         var mc=Minecraft.getInstance();var field=StillworldExitEffect.class.getDeclaredField("live");field.setAccessible(true);
         var live=(RenderTarget)field.get(null);require(live!=null,"Exit has no current reality frame");

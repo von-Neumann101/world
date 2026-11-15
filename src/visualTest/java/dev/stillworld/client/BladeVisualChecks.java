@@ -24,30 +24,36 @@ import java.nio.file.Path;
 /** Uses Minecraft's actual renderer, vertex shader and sampler binding against its live scene. */
 final class BladeVisualChecks {
     static void check(Path output)throws Exception {
+        check(output,RealityOrbRenderer.scene(),"blade");
+    }
+    static void checkExit(Path output,com.mojang.blaze3d.pipeline.RenderTarget source,String stage)throws Exception {
+        check(output,source,"exit-blade-"+stage);
+    }
+    private static void check(Path output,com.mojang.blaze3d.pipeline.RenderTarget source,String prefix)throws Exception {
         var mc=Minecraft.getInstance();var original=mc.getMainRenderTarget();
         var access=(RealityMinecraftAccessor)mc;
         var projection=new Matrix4f(RenderSystem.getProjectionMatrix());
         var view=RenderSystem.getModelViewStack();view.pushMatrix();
         var target=new TextureTarget(512,512,true,Minecraft.ON_OSX);
         try(var input=mc.getResourceManager().getResourceOrThrow(RealityBladeRenderer.APERTURE).open();
-                var mask=NativeImage.read(input);var live=Screenshot.takeScreenshot(RealityOrbRenderer.scene())){
+                var mask=NativeImage.read(input);var live=Screenshot.takeScreenshot(source)){
             require(RealityBladeRenderer.queuedWindows()==0,"Previous world windows leaked into the next tick");
             access.stillworld$target(target);view.identity();RenderSystem.applyModelViewMatrix();
             RenderSystem.setProjectionMatrix(new Matrix4f().setOrtho(0,1,0,1,-1,1),VertexSorting.ORTHOGRAPHIC_Z);
             Lighting.setupForFlatItems();RenderSystem.setShaderColor(1,1,1,1);
             var sword=new ItemStack(ModContent.BLADE.get());
             try(var hand=draw(target,sword,ItemDisplayContext.FIRST_PERSON_RIGHT_HAND,false)){
-                hand.writeToFile(output.resolve("blade-material-live.png"));live.writeToFile(output.resolve("blade-source-live.png"));matches(hand,live,mask,false);
+                hand.writeToFile(output.resolve(prefix+"-material-live.png"));live.writeToFile(output.resolve(prefix+"-source-live.png"));matches(hand,live,mask,false);
             }
             try(var world=draw(target,sword,ItemDisplayContext.GROUND,true)){
-                matches(world,live,mask,true);world.writeToFile(output.resolve("blade-world-occlusion.png"));
+                matches(world,live,mask,true);world.writeToFile(output.resolve(prefix+"-world-occlusion.png"));
             }
             sword.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE,true);
             try(var enchanted=draw(target,sword,ItemDisplayContext.FIRST_PERSON_RIGHT_HAND,false)){
-                matches(enchanted,live,mask,false);enchanted.writeToFile(output.resolve("blade-enchanted.png"));
+                matches(enchanted,live,mask,false);enchanted.writeToFile(output.resolve(prefix+"-enchanted.png"));
             }
             try(var icon=draw(target,sword,ItemDisplayContext.GUI,false)){
-                icon.writeToFile(output.resolve("blade-inventory.png"));
+                icon.writeToFile(output.resolve(prefix+"-inventory.png"));
             }
             require(RealityBladeRenderer.queuedWindows()==0,"World replay retained stale windows");
             System.out.println("STILLWORLD BLADE PIXEL PASS: live samplers, material mask, world occlusion and enchanted aperture");
