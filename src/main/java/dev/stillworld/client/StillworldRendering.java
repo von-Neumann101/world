@@ -49,7 +49,18 @@ public final class StillworldRendering {
 
     public static void render(RenderLevelStageEvent event) {
         boolean reality=RealityOrbRenderer.rendering();
-        if(reality && event.getStage()!=RenderLevelStageEvent.Stage.AFTER_ENTITIES)return;
+        if(reality && event.getStage()!=RenderLevelStageEvent.Stage.AFTER_ENTITIES
+                &&event.getStage()!=RenderLevelStageEvent.Stage.AFTER_BLOCK_ENTITIES)return;
+        // Transparent copies do not write depth. Draw them after opaque block entities
+        // so a chest behind the player cannot overwrite the already blended body.
+        if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_BLOCK_ENTITIES) {
+            if(!StillworldClient.active()||reality) {
+                var buffers=Minecraft.getInstance().renderBuffers().bufferSource();
+                renderPhasedPlayers(event.getPoseStack(),buffers,event.getCamera().getPosition(),event.getPartialTick().getGameTimeDeltaPartialTick(false));
+                buffers.endBatch();
+            }
+            return;
+        }
         if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_PARTICLES && StillworldClient.active() && Minecraft.useShaderTransparency()) {
             // Fabulous clears main depth when compositing its separate translucent targets.
             // Preserve the opaque world before that composite, while leaving its active target intact.
@@ -90,7 +101,6 @@ public final class StillworldRendering {
                     draw(clone, 1, camera, pose, buffers, -1, false);
             }
         }
-        if (!StillworldClient.active() || reality) renderPhasedPlayers(pose, buffers, camera, partial);
         buffers.endBatch();
     }
 
@@ -106,14 +116,34 @@ public final class StillworldRendering {
     private static void renderPhasedPlayers(PoseStack pose, MultiBufferSource buffers, Vec3 camera, float partial) {
         var mc = Minecraft.getInstance();
         if (mc.player != null && mc.level != null && ModContent.equippedRank(mc.player) != null) {
-            long flicker = System.nanoTime() / 140_000_000L;
-            int color = switch ((int)(flicker % 3)) { case 0 -> 0x7A090909; case 1 -> 0x6A888888; default -> 0x88FFFFFF; };
-            boolean silhouette = flicker % 3 != 2;
+            double seconds=System.nanoTime()*1e-9;
             for (var player : mc.level.players()) {
                 if (!StillworldClient.phased(player) || (player == mc.player && mc.options.getCameraType().isFirstPerson())) continue;
-                if (player.distanceToSqr(camera) < 16384) draw(player, partial, camera, pose, buffers, color, silhouette);
+                if (player.distanceToSqr(camera) >= 16384)continue;
+                var position=new Vec3(Mth.lerp(partial,player.xOld,player.getX()),Mth.lerp(partial,player.yOld,player.getY()),Mth.lerp(partial,player.zOld,player.getZ()));
+                var right=new Vec3(camera.z-position.z,0,position.x-camera.x);
+                right=right.lengthSqr()<.0001?new Vec3(1,0,0):right.normalize();
+                // A bounded recent-motion offset adds short trailing echoes without retaining entities/history.
+                var movement=player.position().subtract(player.xOld,player.yOld,player.zOld);
+                var trail=movement.lengthSqr()>4?Vec3.ZERO:movement.scale(2.5);
+                if(trail.lengthSqr()>.42*.42)trail=trail.normalize().scale(.42);
+                double phase=(player.getUUID().hashCode()&1023)*Math.PI*2/1024;
+                var dark=right.scale(-.14-.025*Math.sin(seconds*1.9+phase)).subtract(trail)
+                        .add(0,.025*Math.sin(seconds*1.7+phase),0);
+                var gray=right.scale(.14+.03*Math.sin(seconds*1.6+phase+2.2)).subtract(trail.scale(.55))
+                        .add(0,.018*Math.sin(seconds*2.1+phase+1),0);
+                // Three bodies remain visible together; their opacity changes smoothly and out of phase.
+                drawAfterimage(player,partial,camera,pose,buffers,dark,withAlpha(0x161A1E,.08+.02*Math.sin(seconds*3.6+phase+4.2)),true);
+                drawAfterimage(player,partial,camera,pose,buffers,gray,withAlpha(0xA4AAAE,.13+.03*Math.sin(seconds*4.2+phase+2.1)),true);
+                drawAfterimage(player,partial,camera,pose,buffers,Vec3.ZERO,withAlpha(0xFFFFFF,.24+.04*Math.sin(seconds*3.8+phase)),false);
             }
         }
+    }
+
+    private static int withAlpha(int rgb,double opacity){return ((int)Math.round(opacity*255)<<24)|rgb;}
+    private static void drawAfterimage(Player player,float partial,Vec3 camera,PoseStack pose,MultiBufferSource buffers,Vec3 offset,int tint,boolean silhouette) {
+        pose.pushPose();pose.translate(offset.x,offset.y,offset.z);
+        try {draw(player,partial,camera,pose,buffers,tint,silhouette,true);} finally {pose.popPose();}
     }
 
     /** Restore scene depth so unfiltered skills and colored residuals remain occluded by terrain. */
@@ -155,6 +185,10 @@ public final class StillworldRendering {
 
     private static void draw(Entity entity, float partial, Vec3 camera, PoseStack pose, MultiBufferSource buffers,
                              int tint, boolean silhouette) {
+        draw(entity,partial,camera,pose,buffers,tint,silhouette,false);
+    }
+    private static void draw(Entity entity, float partial, Vec3 camera, PoseStack pose, MultiBufferSource buffers,
+                             int tint, boolean silhouette,boolean afterimage) {
         var dispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
         var renderer = dispatcher.getRenderer(entity);
         pose.pushPose();
@@ -179,7 +213,8 @@ public final class StillworldRendering {
                         var textureState = ((CompositeStateAccessor)(Object)composite.stillworld$state()).stillworld$textureState();
                         texture = ((TextureStateAccessor)textureState).stillworld$texture().orElse(WHITE);
                     }
-                    var type = silhouette ? SilhouetteRenderType.forTexture(texture) : RenderType.entityTranslucent(texture);
+                    var type = afterimage?SilhouetteRenderType.afterimage(texture,silhouette)
+                            :silhouette ? SilhouetteRenderType.forTexture(texture) : RenderType.entityTranslucent(texture);
                     return new TintedConsumer(buffers.getBuffer(type), tint, silhouette);
                 };
             } else if (StillworldClient.active() && entity instanceof LivingEntity) {
@@ -187,7 +222,7 @@ public final class StillworldRendering {
                 target = original -> new SnapshotTintConsumer(buffers.getBuffer(original));
             }
             renderer.render(entity, Mth.rotLerp(partial, entity.yRotO, entity.getYRot()), partial, pose, target,
-                    tint == -1 ? dispatcher.getPackedLightCoords(entity, partial) : LightTexture.FULL_BRIGHT);
+                    tint == -1 || afterimage ? dispatcher.getPackedLightCoords(entity, partial) : LightTexture.FULL_BRIGHT);
         } finally {
             renderingVisual = previous;
             pose.popPose();

@@ -52,7 +52,9 @@ public final class MultiplayerVisualSmoke {
     private volatile boolean serverDone = true;
     private volatile Throwable failure;
     private boolean finished, configured;
-    private int age, ordinaryFrames, visualFrames, nameFrames, frameColor = -1;
+    private int age, ordinaryFrames, visualFrames, nameFrames, frameVisuals;
+    private float frameMinX=Float.POSITIVE_INFINITY,frameMaxX=Float.NEGATIVE_INFINITY;
+    private boolean opaqueBlockEntitiesReady;
     private long observerFrozenTime;
 
     public MultiplayerVisualSmoke(IEventBus bus) {
@@ -74,7 +76,7 @@ public final class MultiplayerVisualSmoke {
         NeoForge.EVENT_BUS.addListener(this::tick);
         NeoForge.EVENT_BUS.addListener(this::playerRender);
         NeoForge.EVENT_BUS.addListener(this::nameRender);
-        NeoForge.EVENT_BUS.addListener(this::rendered);
+        NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.HIGH,this::renderStage);
         NeoForge.EVENT_BUS.addListener(this::guiRendered);
         System.out.println("STILLWORLD MULTIPLAYER " + role + " -> " + output);
     }
@@ -94,6 +96,10 @@ public final class MultiplayerVisualSmoke {
             }
             if (mc.player == null || mc.level == null) return;
             if (!configured) {
+                require(!Boolean.getBoolean("stillworld.hiddenTestWindow")||org.lwjgl.glfw.GLFW.glfwGetWindowAttrib(mc.getWindow().getWindow(),org.lwjgl.glfw.GLFW.GLFW_VISIBLE)==org.lwjgl.glfw.GLFW.GLFW_FALSE,
+                        "Automated multiplayer clients must remain hidden");
+                require(org.lwjgl.glfw.GLFW.glfwGetInputMode(mc.getWindow().getWindow(),org.lwjgl.glfw.GLFW.GLFW_CURSOR)==org.lwjgl.glfw.GLFW.GLFW_CURSOR_NORMAL,
+                        "Automated multiplayer cursor must stay normal");
                 mc.options.hideGui = false;
                 mc.options.fov().set(70);
                 mc.options.guiScale().set(2);
@@ -137,6 +143,7 @@ public final class MultiplayerVisualSmoke {
                     if (observer == null) return;
                     require(server.getPlayerList().getPlayerCount() == 2, "Test server must contain exactly host and Observer");
                     observer.getInventory().clearContent(); equip(observer, null);
+                    observer.setData(ModContent.PSYCHE,new dev.stillworld.server.PsycheData());dev.stillworld.server.PsycheManager.applyHealth(observer);
                     observer.setGameMode(GameType.SURVIVAL);
                     observer.connection.teleport(OBSERVER.x, OBSERVER.y, OBSERVER.z, 0, 10);
                     observer.setHealth(observer.getMaxHealth()); observer.getFoodData().setFoodLevel(20);
@@ -231,12 +238,14 @@ public final class MultiplayerVisualSmoke {
         require(mayBeInside || !StillworldClient.active(), "Observer unexpectedly entered a phase session");
         switch (stage) {
             case "WORLD" -> {
-                if (!remote.equals("BASELINE") || mc.player.position().distanceTo(OBSERVER) > .2) return;
-                require(ModContent.equippedRank(mc.player) == null, "Observer began with an equipped charm");
+                // The host's fixture-ready file can arrive before Curios' network update.
+                if (!remote.equals("BASELINE") || mc.player.position().distanceTo(OBSERVER) > .2
+                        || ModContent.equippedRank(mc.player) != null) return;
                 advance("BASELINE_SAMPLE");
             }
             case "BASELINE_SAMPLE" -> {
                 if (age < 30) return;
+                require(ModContent.equippedRank(mc.player) == null, "Observer began with an equipped charm");
                 require(!StillworldClient.phased(host) && !StillworldRendering.hideOriginal(host), "Baseline host should be ordinary and visible");
                 require(ordinaryFrames > 0 && nameFrames > 0, "Baseline did not exercise real player and name rendering");
                 shot("00-ordinary-host.png");
@@ -269,7 +278,7 @@ public final class MultiplayerVisualSmoke {
                 require(StillworldRendering.hideOriginal(host), "Equipped Observer leaked the host ordinary renderer");
                 require(ordinaryFrames == 0 && nameFrames == 0 && visualFrames > 0,
                         "Wearer must see visual-pass body only; ordinary=" + ordinaryFrames + ", visual=" + visualFrames + ", names=" + nameFrames);
-                checks.add("Equipped Observer rendered actual host only through translucent visual pass; captured all three 140ms flicker slots; no ordinary name/shadow dispatcher");
+                checks.add("Equipped Observer sees three simultaneous displaced translucent bodies with continuous visibility changes; no ordinary name/shadow dispatcher");
                 write("observer-state.txt", "WEARER_DONE"); advance("WAIT_INSIDE");
             }
             case "WAIT_INSIDE" -> {
@@ -287,7 +296,7 @@ public final class MultiplayerVisualSmoke {
                 require(ordinaryFrames == 0 && nameFrames == 0 && visualFrames > 0,
                         "Post-monochrome host body must use only visual pass; ordinary=" + ordinaryFrames + ", visual=" + visualFrames + ", names=" + nameFrames);
                 require(mc.options.entityShadows().get(), "Shadow rendering must remain enabled during inside sample");
-                checks.add("Observer entered its own real session: frozen monochrome background/ground plus three post-effect residual slots, original skin color preserved, no ordinary names/shadow dispatcher");
+                checks.add("Observer entered its own real session: frozen monochrome background/ground plus overlapping post-effect residuals, original skin color preserved, no ordinary names/shadow dispatcher");
                 write("observer-state.txt", "INSIDE_DONE"); advance("WAIT_OBSERVER_OUT");
             }
             case "WAIT_OBSERVER_OUT" -> {
@@ -323,11 +332,10 @@ public final class MultiplayerVisualSmoke {
     private void playerRender(RenderPlayerEvent.Pre event) {
         if (!role.equals("observer") || hostId == null || !event.getEntity().getUUID().equals(hostId)) return;
         if (StillworldRendering.visualPass()) {
+            if(!opaqueBlockEntitiesReady)failure=new AssertionError("Afterimages rendered before opaque block entities could supply the background/depth");
             visualFrames++;
-            long now = System.nanoTime(), offset = now % 140_000_000L;
-            // Avoid assigning a screenshot to the adjacent tint at a clock boundary.
-            frameColor = offset > 10_000_000L && offset < 130_000_000L
-                    ? (int)((now / 140_000_000L) % 3) : -1;
+            frameVisuals++;
+            float x=event.getPoseStack().last().pose().m30();frameMinX=Math.min(frameMinX,x);frameMaxX=Math.max(frameMaxX,x);
         } else ordinaryFrames++;
     }
 
@@ -335,25 +343,23 @@ public final class MultiplayerVisualSmoke {
         if (role.equals("observer") && hostId != null && event.getEntity().getUUID().equals(hostId)) nameFrames++;
     }
 
-    private void rendered(RenderLevelStageEvent event) {
-        if (!role.equals("observer") || finished || event.getStage() != RenderLevelStageEvent.Stage.AFTER_LEVEL) return;
-        // Inside, the residual pass runs later, after the monochrome PostChain.
-        // Read those pixels at GUI completion, not here before post-processing.
-        if (StillworldClient.active()) return;
-        try {
-            if (stage.equals("WEARER_SAMPLE") && frameColor >= 0 && !colors[frameColor]) {
-                shot("0" + (frameColor + 2) + "-wearer-" + new String[]{"black", "gray", "white"}[frameColor] + ".png");
-                colors[frameColor] = true;
-            }
-        } catch (Throwable exception) { failure = exception; }
-        frameColor = -1;
+    private void renderStage(RenderLevelStageEvent event) {
+        if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_BLOCK_ENTITIES)opaqueBlockEntitiesReady=true;
     }
 
     private void guiRendered(RenderGuiEvent.Post event) {
-        if (!role.equals("observer") || finished || !stage.equals("INSIDE_SAMPLE") || frameColor < 0) return;
+        if (!role.equals("observer") || finished)return;
         try {
+            if(stage.equals("WEARER_SAMPLE")||stage.equals("INSIDE_SAMPLE")) {
+                require(frameVisuals==3,"Expected three simultaneous afterimage bodies, got "+frameVisuals);
+                require(frameMaxX-frameMinX>.12,"Afterimage bodies overlap without any visible lateral separation");
+            }
+            int slot=Math.min(2,age/12);
+            if(stage.equals("WEARER_SAMPLE")&&!colors[slot]) {
+                shot("0"+(slot+2)+"-wearer-overlap.png");colors[slot]=true;
+            }
+            if(!stage.equals("INSIDE_SAMPLE"))return;
             require(StillworldClient.active() && monochromeLoaded(), "Post-effect capture requires Observer's own monochrome session");
-            int slot = frameColor;
             if (!insideColors[slot]) {
                 try (var image = Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
                     // Fixed camera and scene: these side patches are the green/red wall;
@@ -362,14 +368,14 @@ public final class MultiplayerVisualSmoke {
                     double ground = chroma(image, .38, .75, .42, .82);
                     double coloredBody = coloredFraction(image, .48, .35, .52, .55);
                     require(wall < 4 && ground < 4, "Observer environment was not monochrome: wall=" + wall + ", ground=" + ground);
-                    if (slot == 2) require(coloredBody > .1, "Original-color Host residual was desaturated by post-processing: fraction=" + coloredBody);
-                    image.writeToFile(output.resolve("0" + (slot + 6) + "-inside-post-" + new String[]{"black", "gray", "original-color"}[slot] + ".png"));
+                    require(coloredBody > .1, "Original-color Host residual was desaturated by post-processing: fraction=" + coloredBody);
+                    image.writeToFile(output.resolve("0" + (slot + 6) + "-inside-overlap.png"));
                     checks.add("Inside slot " + slot + " pixel evidence: wall chroma=" + wall + ", ground chroma=" + ground + ", colored body fraction=" + coloredBody);
                     insideColors[slot] = true;
                 }
             }
         } catch (Throwable exception) { failure = exception; }
-        frameColor = -1;
+        finally {frameVisuals=0;frameMinX=Float.POSITIVE_INFINITY;frameMaxX=Float.NEGATIVE_INFINITY;opaqueBlockEntitiesReady=false;}
     }
 
     private static boolean monochromeLoaded() {
@@ -415,7 +421,11 @@ public final class MultiplayerVisualSmoke {
         }
         for (int x = -4; x <= 4; x++) for (int y = 100; y <= 104; y++)
             level.setBlockAndUpdate(new BlockPos(x, y, 7), (x < 0 ? Blocks.LIME_WOOL : Blocks.RED_WOOL).defaultBlockState());
+        // Opaque block entities behind the body must remain visible through it, not overwrite it.
+        level.setBlockAndUpdate(new BlockPos(0,100,6),Blocks.CHEST.defaultBlockState());
+        level.setBlockAndUpdate(new BlockPos(0,101,6),Blocks.CHEST.defaultBlockState());
         host.setGameMode(GameType.SURVIVAL); host.getInventory().clearContent(); equip(host, Rank.RANK1);
+        host.setData(ModContent.PSYCHE,new dev.stillworld.server.PsycheData());dev.stillworld.server.PsycheManager.applyHealth(host);
         host.connection.teleport(HOST.x, HOST.y, HOST.z, 180, 0);
         host.setHealth(host.getMaxHealth()); host.getFoodData().setFoodLevel(20);
     }
@@ -461,7 +471,7 @@ public final class MultiplayerVisualSmoke {
     }
 
     private void advance(String next) {
-        stage = next; age = ordinaryFrames = visualFrames = nameFrames = 0; frameColor = -1;
+        stage = next; age = ordinaryFrames = visualFrames = nameFrames = 0;
         System.out.println("STILLWORLD MULTIPLAYER " + role + " " + next);
     }
 

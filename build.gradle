@@ -47,6 +47,7 @@ neoForge {
         multiplayerHost {
             client()
             systemProperty 'stillworld.automatedClient', 'true'
+            if (providers.gradleProperty('hiddenVisualTest').isPresent()) systemProperty 'stillworld.hiddenTestWindow', 'true'
             sourceSet = sourceSets.multiplayerTest
             gameDirectory = project.file('run/multiplayer-host')
             programArguments.addAll('--username', 'PhaseHost', '--quickPlaySingleplayer', 'StillworldMultiplayerSmoke')
@@ -56,6 +57,7 @@ neoForge {
         multiplayerObserver {
             client()
             systemProperty 'stillworld.automatedClient', 'true'
+            if (providers.gradleProperty('hiddenVisualTest').isPresent()) systemProperty 'stillworld.hiddenTestWindow', 'true'
             sourceSet = sourceSets.multiplayerTest
             gameDirectory = project.file('run/multiplayer-observer')
             programArguments.addAll('--username', 'Observer', '--quickPlayMultiplayer', 'localhost:25588')

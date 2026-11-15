@@ -16,6 +16,8 @@ import java.util.Map;
 final class SilhouetteRenderType extends RenderType {
     private static ShaderInstance shader;
     private static final Map<ResourceLocation,RenderType> TYPES = new HashMap<>();
+    private record AfterimageKey(ResourceLocation texture,boolean silhouette) {}
+    private static final Map<AfterimageKey,RenderType> AFTERIMAGES=new HashMap<>();
 
     static void registerShaders(RegisterShadersEvent event) {
         try {
@@ -32,6 +34,17 @@ final class SilhouetteRenderType extends RenderType {
                         .setTransparencyState(TRANSLUCENT_TRANSPARENCY)
                         .setCullState(NO_CULL)
                         .createCompositeState(false)));
+    }
+
+    /** Keep terrain depth testing, but let all translucent player copies blend together. */
+    static RenderType afterimage(ResourceLocation texture,boolean silhouette) {
+        return AFTERIMAGES.computeIfAbsent(new AfterimageKey(texture,silhouette),key->create("stillworld_afterimage",
+                DefaultVertexFormat.NEW_ENTITY,VertexFormat.Mode.QUADS,1536,true,true,CompositeState.builder()
+                        .setShaderState(key.silhouette?new ShaderStateShard(()->shader):RENDERTYPE_ENTITY_TRANSLUCENT_SHADER)
+                        .setTextureState(new TextureStateShard(key.texture,false,false))
+                        .setTransparencyState(TRANSLUCENT_TRANSPARENCY).setCullState(NO_CULL)
+                        .setLightmapState(LIGHTMAP).setOverlayState(OVERLAY)
+                        .setWriteMaskState(COLOR_WRITE).createCompositeState(false)));
     }
 
     private SilhouetteRenderType() { super("stillworld_silhouette",DefaultVertexFormat.NEW_ENTITY,VertexFormat.Mode.QUADS,1536,true,true,()->{},()->{}); }
