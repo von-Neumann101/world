@@ -57,7 +57,7 @@ import java.util.function.Consumer;
 /** Exclusive development source set; no world-writing test code is shipped in the main jar. */
 @Mod(value = Stillworld.ID, dist = Dist.CLIENT)
 public final class ClientVisualSmoke {
-    private enum Step { WORLD, SETUP, BASELINE, ENTER, FROZEN, ORB_VIEW, ORB_RETURN, BE_RELOAD, VISION_RESIZE, VISION_RELOAD, VISION_FABULOUS, ORB_RELOADED, ORB_DISTANCE, ORB_RESTORED, MARK, ATTACK, SLASH, MINE_AIM, MINING, PLACE_AIM, PLACING, DEAD, EXIT, RESTORED }
+    private enum Step { WORLD, SETUP, BASELINE, ENTER, FROZEN, ORB_VIEW, ORB_RETURN, BE_RELOAD, VISION_RESIZE, VISION_RELOAD, VISION_FABULOUS, ORB_RELOADED, ORB_DISTANCE, ORB_RESTORED, MARK, ATTACK, SLASH, SLASH_RESOLVED, MINE_AIM, MINING, PLACE_AIM, PLACING, DEAD, EXIT, RESTORED }
     private static final Vec3 ENTRY = new Vec3(.5,100,.5), COW = new Vec3(.5,100,2.9);
     private static final BlockPos MINE = new BlockPos(1,100,2), SUPPORT = new BlockPos(-1,99,2), REAL_CHANGE = new BlockPos(3,100,2);
     private static final BlockPos CHEST=new BlockPos(-3,100,2), ENDER=new BlockPos(-4,100,3), SHULKER=new BlockPos(2,100,5), BOOK=new BlockPos(-3,100,5), BELL=new BlockPos(3,100,5);
@@ -71,7 +71,8 @@ public final class ClientVisualSmoke {
     private boolean finished, sent;
     private volatile boolean serverDone;
     private volatile Throwable serverFailure;
-    private UUID cowId, pigId, skeletonId;
+    private UUID cowId, pigId, skeletonId, lateSpawnId;
+    private int lateProjectionFrames,lateRealityFrames;
     private int markedProjectionFrames;
     private CompoundTag frozenModel;
     private long frozenTime;
@@ -142,7 +143,7 @@ public final class ClientVisualSmoke {
                     require(StillworldPostEffect.settled(),"World linework shader did not finish its entry wave");
                     checkRadialField();
                     DistanceShaderProbe.check(output);
-                    checks.add("Actual shader retained near texture contrast, lifted distant shadows into silver haze at 4/16/40/88/184/512 blocks, and preserved pale sky layering");
+                    checks.add("Actual shader retained near atmosphere, deepened distant shadows and preserved pale sky layering");
                     require(RealityWorld.level()!=null && RealityWorld.level()!=mc.level,"Live orb world was not independent");
                     ghostTick=ghost.tickCount;liveTick=live(cowId).tickCount;frozenTime=mc.level.getGameTime();frozenModel=ClientPose.capture(ghost);
                     for(var entry:originalBlockEntities.entrySet())require(mc.level.getBlockEntity(entry.getKey())!=entry.getValue(),"Entry did not exercise chunk replacement for "+entry.getKey());
@@ -155,6 +156,8 @@ public final class ClientVisualSmoke {
                     onServer(p->{
                         p.serverLevel().getEntity(cowId).setPos(COW.add(2,0,1));p.serverLevel().setBlockAndUpdate(REAL_CHANGE,Blocks.DIAMOND_BLOCK.defaultBlockState());
                         p.serverLevel().getEntity(skeletonId).setPos(-1.7,100,3.6);
+                        var late=EntityType.COW.create(p.serverLevel());require(late!=null,"Late-spawn fixture failed");
+                        late.setNoAi(true);late.setNoGravity(true);late.setPos(COW.add(-1.2,0,0));p.serverLevel().addFreshEntity(late);lateSpawnId=late.getUUID();
                         // An additional detached self visual is invisible during phase, but exercises the vanilla player model in isolation.
                         var visual=EntityVisual.capture(p);visual.put("clientPose",ownPose);
                         var data=PhaseNetwork.message("ghost");data.putUUID("session",PhaseManager.get(p).id);data.put("visual",visual);PhaseNetwork.sendState(p,data);
@@ -163,6 +166,10 @@ public final class ClientVisualSmoke {
                 }
                 case FROZEN -> {
                     if(age<65||!serverDone)return;
+                    require(lateSpawnId!=null&&live(lateSpawnId)!=null,"Late real creature did not reach the client");
+                    require(!StillworldClient.ghosts().containsKey(lateSpawnId),"Late creature entered the frozen snapshot");
+                    require(lateProjectionFrames==0,"Post-entry creature leaked into Stillworld white projection");
+                    checks.add("Post-entry creature exists in live client state but has neither frozen body nor white projection");
                     checkLinework();
                     var ghost=StillworldClient.ghosts().get(cowId);var real=live(cowId);
                     require(ghost.tickCount==ghostTick && frozenModel.equals(ClientPose.capture(ghost)),"Frozen vanilla model or animation time advanced");
@@ -198,6 +205,8 @@ public final class ClientVisualSmoke {
                     aim(ENTRY.add(0,1,0));
                     if(!serverDone||age<100)return;
                     checkOrb("orb-fancy.png");checkRadialField();
+                    require(lateRealityFrames>0,"Post-entry creature never rendered in the live orb while phased");
+                    checks.add("Post-entry creature is hidden in Stillworld but still renders in the live orb before exit");
                     onServer(p->p.connection.teleport(ENTRY.x,ENTRY.y,ENTRY.z,0,0));advance(Step.ORB_RETURN);
                 }
                 case ORB_RETURN -> {
@@ -243,6 +252,10 @@ public final class ClientVisualSmoke {
                     if(age<50)return;
                     require(Minecraft.useShaderTransparency(),"Fabulous transparency was not actually enabled");
                     checkRadialField();
+                    require(lateSpawnId!=null&&live(lateSpawnId)!=null,"Late real creature did not reach the client");
+                    require(!StillworldClient.ghosts().containsKey(lateSpawnId),"Late creature entered the frozen snapshot");
+                    require(lateProjectionFrames==0,"Post-entry creature leaked into Stillworld white projection");
+                    checks.add("Post-entry creature exists in live client state but has neither frozen body nor white projection");
                     checkLinework();shot("10-linework-fabulous.png");
                     checks.add("Fabulous transparency composition retained scene depth and sparse structural contours");
                     onServer(p->p.connection.teleport(ENTRY.x,ENTRY.y,ENTRY.z-6,0,0));advance(Step.ORB_RELOADED);
@@ -296,6 +309,16 @@ public final class ClientVisualSmoke {
                     if(!sent && age>=8){click(mc.options.keyUse);sent=true;}
                     if(!sent||age<25||StillworldClient.slashes().size()!=1)return;
                     shot("04-marked-ledger-slash.png");checks.add("Right click with the Stillworld blade placed one stationary slash");
+                    advance(Step.SLASH_RESOLVED);
+                }
+                case SLASH_RESOLVED -> {
+                    if(age<25)return;
+                    require(StillworldClient.slashes().isEmpty(),"Resolved slash remained visible after its deadline");
+                    onServer(p->{var s=PhaseManager.get(p);var cow=(LivingEntity)p.serverLevel().getEntity(cowId);
+                        require(s!=null&&s.slashes.isEmpty(),"Slash did not resolve while still phased");
+                        require(Math.abs(cow.getHealth()-70)<.01,"Timed slash did not directly hit the real target for thirty percent maximum health");
+                        require(s.damage.accumulated(cowId)>0,"Timed slash consumed the separate melee ledger");});
+                    checks.add("Timed slash hit reality during the session and removed its client model while melee damage remained deferred");
                     mc.player.getInventory().selected=2;aim(Vec3.atCenterOf(MINE));advance(Step.MINE_AIM);
                 }
                 case MINE_AIM -> {if(age<6)return;mc.options.keyAttack.setDown(true);advance(Step.MINING);}
@@ -327,10 +350,12 @@ public final class ClientVisualSmoke {
                     require(mc.level.getBlockState(MINE).isAir(),"Permanent mining was restored on exit");
                     require(mc.level.getBlockState(SUPPORT.above()).isAir(),"Temporary placement remained after exit");
                     require(mc.level.getBlockState(REAL_CHANGE).is(Blocks.DIAMOND_BLOCK),"Exit did not restore current real terrain");
-                    onServer(p->{require(PhaseManager.get(p)==null,"V did not finish the server session");var cow=(LivingEntity)p.serverLevel().getEntity(cowId);require(cow.getHealth()<100,"Exit failed to settle stored damage/slash");});
+                    onServer(p->{require(PhaseManager.get(p)==null,"V did not finish the server session");var cow=(LivingEntity)p.serverLevel().getEntity(cowId);require(cow.getHealth()<70,"Exit failed to settle stored melee damage");});
                     checks.add("V restored live color/terrain, removed temporary placement, retained permanent mining, and settled damage");advance(Step.RESTORED);
                 }
-                case RESTORED -> {if(!serverDone||age<25)return;require(mc.level.getGameTime()>frozenTime,"Live environment time did not resume");shot("06-reality-restored.png");finish(null);}
+                case RESTORED -> {if(!serverDone||age<25)return;require(mc.level.getGameTime()>frozenTime,"Live environment time did not resume");
+                    require(lateRealityFrames>0,"Post-entry creature was never rendered in live reality/orb");
+                    checks.add("The same post-entry creature remains visible in live reality/orb");shot("06-reality-restored.png");finish(null);}
                 default -> { }
             }
         } catch(Throwable failure){finish(failure);}
@@ -379,6 +404,10 @@ public final class ClientVisualSmoke {
     }
     private void livingRendered(RenderLivingEvent.Pre<?,?> event) {
         var entity=event.getEntity();
+        if(lateSpawnId!=null&&entity.getUUID().equals(lateSpawnId)) {
+            if(StillworldClient.active()&&!RealityOrbRenderer.rendering())lateProjectionFrames++;
+            else lateRealityFrames++;
+        }
         if(cowId!=null&&entity.getUUID().equals(cowId)&&StillworldClient.active()&&StillworldRendering.visualPass()
                 &&StillworldClient.locked(entity)&&entity!=StillworldClient.ghosts().get(cowId))markedProjectionFrames++;
     }

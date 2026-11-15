@@ -21,7 +21,7 @@ public final class PhaseSession {
     public final Map<net.minecraft.core.BlockPos,net.minecraft.world.level.block.state.BlockState> placedBefore = new LinkedHashMap<>();
     public final Map<UUID,EntitySnapshot> marked = new LinkedHashMap<>();
     public final Set<UUID> dead = new HashSet<>();
-    public final List<dev.stillworld.core.Slash> slashes = new ArrayList<>();
+    public final Map<UUID,dev.stillworld.core.Slash> slashes = new LinkedHashMap<>();
     public net.minecraft.core.BlockPos mining;
     public float miningProgress;
     private final SnapshotWorld snapshot;

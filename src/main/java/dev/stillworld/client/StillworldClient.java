@@ -97,6 +97,7 @@ public final class StillworldClient {
         return PHASED.contains(entity.getUUID()) || (active() && entity == Minecraft.getInstance().player);
     }
     public static Map<UUID, Entity> ghosts() { return Collections.unmodifiableMap(GHOSTS); }
+    public static boolean captured(UUID id) {return GHOSTS.containsKey(id);}
     public static boolean isDead(UUID uuid) { return DEAD.contains(uuid); }
     static List<StillworldRendering.Slash> slashes() { return SLASHES; }
     public static boolean locked(Entity entity) { return LOCKED.containsKey(entity.getUUID()); }
@@ -186,7 +187,8 @@ public final class StillworldClient {
                         }
                     }
                     case "dead" -> DEAD.add(tag.getUUID("uuid"));
-                    case "slash" -> SLASHES.add(new StillworldRendering.Slash(new Vec3(tag.getDouble("cx"), tag.getDouble("cy"), tag.getDouble("cz")), tag.getFloat("yaw"), tag.getFloat("pitch")));
+                    case "slash" -> SLASHES.add(new StillworldRendering.Slash(tag.getUUID("id"),new Vec3(tag.getDouble("cx"), tag.getDouble("cy"), tag.getDouble("cz")), tag.getFloat("yaw"), tag.getFloat("pitch")));
+                    case "slash_end" -> SLASHES.removeIf(slash->slash.id().equals(tag.getUUID("id")));
                     default -> { }
                 }
             }
@@ -325,6 +327,7 @@ public final class StillworldClient {
         var mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return;
         for (var uuid : LOCKED.keySet()) {
+            if(active()&&!captured(uuid))continue;
             var ghost = LOCKED.get(uuid);
             if (mc.player.distanceToSqr(ghost) < 4096) {
                 var random = mc.level.random;

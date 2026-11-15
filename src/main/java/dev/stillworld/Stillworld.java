@@ -9,6 +9,6 @@ import dev.stillworld.server.PhaseManager;
 @Mod(Stillworld.ID)
 public final class Stillworld {
     public static final String ID = "stillworld";
-    public Stillworld(IEventBus bus) { ModContent.register(bus); PhaseNetwork.register(bus); PhaseManager.register(); dev.stillworld.server.PhaseSkills.register(); dev.stillworld.server.PhaseCommands.register(); dev.stillworld.server.PsycheManager.register(); }
+    public Stillworld(IEventBus bus) { ModContent.register(bus); PhaseNetwork.register(bus); PhaseManager.register(); dev.stillworld.server.PhaseSkills.register(); dev.stillworld.server.PhaseCommands.register(); dev.stillworld.server.PsycheManager.register(); dev.stillworld.server.PendingSlashes.register(); }
     public static ResourceLocation id(String path) { return ResourceLocation.fromNamespaceAndPath(ID, path); }
 }

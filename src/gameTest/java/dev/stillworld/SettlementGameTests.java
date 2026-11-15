@@ -44,25 +44,6 @@ public final class SettlementGameTests {
         PhaseManager.exit(p);p.aiStep();
         h.assertTrue(orb.isRemoved()&&p.totalExperience==5,"normal pickup resumes on exit");h.succeed();
     }
-    @GameTest(template="empty") public static void slashUsesExitPositionsAndOnlySettlesOnce(GameTestHelper h) {
-        var p=SessionGameTests.player(h); SessionGameTests.equip(p,Rank.RANK6);
-        p.setItemInHand(InteractionHand.MAIN_HAND,new ItemStack(ModContent.BLADE.get()));
-        p.setYRot(0); p.setXRot(0);
-        var incoming=h.spawnWithNoFreeWill(EntityType.COW,new BlockPos(9,2,3));
-        var outgoing=h.spawnWithNoFreeWill(EntityType.COW,new BlockPos(9,2,5));
-        for(var cow:java.util.List.of(incoming,outgoing)) {cow.getAttribute(Attributes.MAX_HEALTH).setBaseValue(100);cow.setHealth(100);}
-        var center=p.getEyePosition().add(0,0,2);
-        outgoing.setPos(center.add(0,-0.5,0));
-        PhaseManager.enter(p);var s=PhaseManager.get(p);
-        var action=PhaseNetwork.message("slash");action.putUUID("session",s.id);PhaseManager.handle(p,action);
-        h.assertTrue(s.slashes.size()==1,"blade creates one stationary slash");
-        h.assertTrue(incoming.getHealth()==100&&outgoing.getHealth()==100,"creating slash causes no immediate damage");
-        outgoing.setPos(center.add(7,0,0)); incoming.setPos(center.add(0,-0.5,0));
-        PhaseManager.exit(p);
-        h.assertTrue(Math.abs(incoming.getHealth()-70)<0.01,"unmarked mob moving into slash receives thirty percent maximum health");
-        h.assertTrue(outgoing.getHealth()==100,"mob moving out is not hit at its old position");
-        PhaseManager.exit(p); h.assertTrue(incoming.getHealth()==70,"repeat exit cannot settle the slash again"); h.succeed();
-    }
     @GameTest(template="empty") public static void lowerRanksCannotMutateOrMark(GameTestHelper h) {
         var p=SessionGameTests.player(h);SessionGameTests.equip(p,Rank.RANK1);
         var block=p.blockPosition().east(2).below();h.getLevel().setBlockAndUpdate(block,Blocks.STONE.defaultBlockState());

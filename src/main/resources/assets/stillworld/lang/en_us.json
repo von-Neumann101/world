@@ -24,7 +24,7 @@
   "message.stillworld.changed_block": "This block changed in reality; the old snapshot cannot break it.",
   "message.stillworld.already_marked": "Another player has already marked this creature.",
   "message.stillworld.linked_target": "This target requires linked-state rollback, planned for a later version.",
-  "message.stillworld.slash_limit": "This session already contains 16 slashes.",
+  "message.stillworld.slash_limit": "There are already 16 slashes waiting to strike.",
   "block.stillworld.distortion_treatment_machine": "Distortion Treatment Machine (Reserved)",
   "hud.stillworld.psyche": "Psyche: %s / 100",
   "hud.stillworld.cooldown": "Switch ready in %ss",

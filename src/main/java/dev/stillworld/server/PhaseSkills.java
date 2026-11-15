@@ -179,8 +179,8 @@ public final class PhaseSkills {
         if(!s.rank.canSlash()||!s.player.getMainHandItem().is(ModContent.BLADE.get()))return;
         if(s.slashes.size()>=16){message(s,"slash_limit");return;}
         if(!PsycheManager.canSpend(s,40))return;
-        var center=s.player.getEyePosition().add(s.player.getLookAngle().scale(2));var slash=new Slash(center.x,center.y,center.z,s.player.getYRot(),s.player.getXRot());s.slashes.add(slash);
-        var data=PhaseNetwork.message("slash");data.putUUID("session",s.id);data.putDouble("cx",center.x);data.putDouble("cy",center.y);data.putDouble("cz",center.z);data.putFloat("yaw",slash.yaw());data.putFloat("pitch",slash.pitch());PhaseNetwork.sendState(s.player,data);
+        var center=s.player.getEyePosition().add(s.player.getLookAngle().scale(2));var slash=new Slash(center.x,center.y,center.z,s.player.getYRot(),s.player.getXRot());var id=PendingSlashes.schedule(s,slash);
+        var data=PhaseNetwork.message("slash");data.putUUID("session",s.id);data.putUUID("id",id);data.putDouble("cx",center.x);data.putDouble("cy",center.y);data.putDouble("cz",center.z);data.putFloat("yaw",slash.yaw());data.putFloat("pitch",slash.pitch());PhaseNetwork.sendState(s.player,data);
         PsycheManager.spend(s,40);
     }
     private static void tick(PhaseSession s) {
@@ -229,22 +229,11 @@ public final class PhaseSkills {
                 float amount=s.damage.drain(id);
                 if(amount>0&&s.level.getEntity(id) instanceof LivingEntity target&&target.isAlive()) {target.invulnerableTime=0;target.hurt(s.player.damageSources().playerAttack(s.player),amount);}
             }
-            for(var slash:s.slashes) {
-                var region=new AABB(slash.x()-3,slash.y()-3,slash.z()-3,slash.x()+3,slash.y()+3,slash.z()+3);
-                for(var target:s.level.getEntitiesOfClass(LivingEntity.class,region)) {
-                    if(target==s.player||!target.isAlive()||PhaseManager.isPhased(target)||s.player.isAlliedTo(target))continue;
-                    if(target instanceof Player other&&(!s.level.getServer().isPvpAllowed()||!s.player.canHarmPlayer(other)))continue;
-                    Entity receiver=target;boolean hit=intersects(slash,target);
-                    if(target.isMultipartEntity()&&target.getParts()!=null)for(var part:target.getParts())if(intersects(slash,part)){receiver=part;hit=true;break;}
-                    if(hit){target.invulnerableTime=0;receiver.hurt(s.player.damageSources().playerAttack(s.player),target.getMaxHealth()*0.3f);}
-                }
-            }
         } finally {
             for(var id:List.copyOf(s.marked.keySet()))unlock(s,id);
             s.slashes.clear();FogRecovery.get(s.level).finish(s.level,s.id);s.placedBefore.clear();
         }
     }
-    private static boolean intersects(Slash slash,Entity target) {var b=target.getBoundingBox();return slash.intersects(b.minX,b.minY,b.minZ,b.maxX,b.maxY,b.maxZ);}
     private static void recover(ChunkEvent.Load event) {if(event.getLevel() instanceof ServerLevel level)FogRecovery.get(level).recoverChunk(level,event.getChunk().getPos());}
     private static void startTracking(PlayerEvent.StartTracking event) {
         if (!(event.getEntity() instanceof ServerPlayer observer)) return;

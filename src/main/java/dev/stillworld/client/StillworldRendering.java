@@ -35,7 +35,7 @@ public final class StillworldRendering {
     private static Matrix4f worldProjection, worldView;
     private static Vec3 worldCamera;
     private static float worldPartial;
-    public record Slash(Vec3 center, float yaw, float pitch) { }
+    public record Slash(java.util.UUID id,Vec3 center, float yaw, float pitch) { }
     public static boolean visualPass() { return renderingVisual; }
 
     /** Cancel at the dispatcher before renderer layers, names, shadows, or debug hitboxes run. */
@@ -133,7 +133,7 @@ public final class StillworldRendering {
             var pose=new PoseStack();
             if(StillworldClient.seeLive())for(var entity:mc.level.entitiesForRendering()) {
                 if(!(entity instanceof LivingEntity)||entity==mc.player||StillworldClient.phased(entity)
-                        ||StillworldClient.locked(entity)||!entity.isAlive())continue;
+                        ||StillworldClient.locked(entity)||!entity.isAlive()||!StillworldClient.captured(entity.getUUID()))continue;
                 if(event.getFrustum().isVisible(entity.getBoundingBox().inflate(.5)))
                     draw(entity,worldPartial,worldCamera,pose,buffers,0x28D8D8D8,true);
             }

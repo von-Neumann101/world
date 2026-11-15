@@ -18,7 +18,8 @@ public final class PhaseNetwork {
     public static Predicate<Entity> clientPhased = entity -> false;
     public static void register(IEventBus bus) { bus.addListener(PhaseNetwork::payloads); }
     private static void payloads(RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar("1");
+        // Slash packets now require IDs and expiry notifications on both ends.
+        var registrar = event.registrar("2");
         registrar.playToClient(StatePayload.TYPE, StatePayload.CODEC, (payload, context) -> clientHandler.accept(payload.data()));
         registrar.playToClient(RealityPayload.TYPE, RealityPayload.CODEC, (payload, context) -> realityHandler.accept(payload.session(), payload.packet()));
         registrar.playToServer(ActionPayload.TYPE, ActionPayload.CODEC, (payload, context) -> {
