@@ -50,7 +50,7 @@ public final class RiftShaderProbe {
                 near(pixels,64,320,.2f,.2f,.2f,"old rectangle is fully absent outside the cut");
                 near(pixels,448,64,.2f,.2f,.2f,"opposite corner is transparent");
                 int middle=columnSize(pixels,256),left=columnSize(pixels,12),right=columnSize(pixels,499);
-                check(middle>30&&middle<100,"narrow opening, not a rectangular panel");
+                check(middle>=26&&middle<=36,"slender opening, about forty percent of the original width");
                 check(left>0&&right>0&&left<middle*.2&&right<middle*.2,"both ends taper to fine tips");
                 check(columnSize(pixels,0)<4&&columnSize(pixels,511)<4,"tips close at the ends");
                 write(Path.of(args[1],"rift-mask.png"),pixels);
