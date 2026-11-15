@@ -57,6 +57,12 @@ public final class PlacementGameTests {
     @GameTest(template="empty") public static void removingBedFootRestoresWholePlacement(GameTestHelper h) {
         removePart(h,Items.RED_BED,false,false);
     }
+    @GameTest(template="empty") public static void removingTreatmentTopRestoresWholePlacement(GameTestHelper h) {
+        removePart(h,ModContent.TREATMENT_MACHINE.get().asItem(),true,false);
+    }
+    @GameTest(template="empty") public static void removingTreatmentBottomRestoresWholePlacement(GameTestHelper h) {
+        removePart(h,ModContent.TREATMENT_MACHINE.get().asItem(),false,false);
+    }
     private static void removePart(GameTestHelper h,Item item,boolean second,boolean grass) {
         var p=SessionGameTests.player(h);SessionGameTests.equip(p,Rank.RANK2);
         var support=p.blockPosition().east(2).below();var bottom=support.above();
@@ -75,10 +81,12 @@ public final class PlacementGameTests {
             var state=s.snapshot().getBlockState(bottom);
             var other=item==Items.RED_BED?bottom.relative(state.getValue(BedBlock.FACING)):bottom.above();
             h.assertTrue(s.placedBefore.size()==2,"both parts recorded");
+            h.assertTrue(s.snapshot().getBlockState(other).is(state.getBlock()),"both parts have the same block type");
+            h.assertTrue(h.getLevel().getBlockState(bottom).is(ModContent.BLACK_MIST.get())&&h.getLevel().getBlockState(other).is(ModContent.BLACK_MIST.get()),"both parts have reality mist");
             h.assertTrue(p.getMainHandItem().getCount()==1,"one item consumed for both parts");
             var removed=second?other:bottom;
             var target=s.snapshot().getBlockState(removed).getShape(s.snapshot(),removed).bounds().getCenter().add(Vec3.atLowerCornerOf(removed));
-            p.setPos(target.add(0,2,0));
+            p.setPos(second||item==Items.RED_BED?target.add(0,2,0):target.add(-2,-.6,0));
             SkillGameTests.aim(p,target);
             h.assertTrue(PhaseSkills.breakBlock(s,removed),"either member can remove a rank2 placement");
             h.assertTrue(s.snapshot().getBlockState(bottom)==before&&s.snapshot().getBlockState(other).isAir(),"all snapshot states restored");

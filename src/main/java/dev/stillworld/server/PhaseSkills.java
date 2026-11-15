@@ -4,6 +4,7 @@ import dev.stillworld.core.Slash;
 import dev.stillworld.mixin.BlockItemAccessor;
 import dev.stillworld.network.PhaseNetwork;
 import dev.stillworld.snapshot.SnapshotReadContext;
+import dev.stillworld.workshop.TreatmentBlock;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.*;
@@ -74,6 +75,22 @@ public final class PhaseSkills {
     private static boolean mayEdit(PhaseSession s,BlockPos pos) {
         return s.player.mayBuild()&&!s.level.isOutsideBuildHeight(pos)&&s.level.getWorldBorder().isWithinBounds(pos)&&s.level.mayInteract(s.player,pos);
     }
+    private static boolean isVerticalPair(BlockState state) {
+        return state.getBlock() instanceof DoorBlock||state.getBlock() instanceof DoublePlantBlock||state.getBlock() instanceof TreatmentBlock;
+    }
+    /** Only the matching member of this structure, never arbitrary attached neighbors. */
+    private static BlockPos companion(PhaseSession s,BlockPos pos,BlockState state) {
+        if(isVerticalPair(state)) {
+            var half=state.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF);
+            var other=half==DoubleBlockHalf.LOWER?pos.above():pos.below();var paired=s.snapshot().getBlockState(other);
+            if(paired.is(state.getBlock())&&paired.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF)!=half)return other;
+        } else if(state.getBlock() instanceof BedBlock) {
+            var facing=state.getValue(BedBlock.FACING);var part=state.getValue(BedBlock.PART);
+            var other=pos.relative(part==BedPart.FOOT?facing:facing.getOpposite());var paired=s.snapshot().getBlockState(other);
+            if(paired.is(state.getBlock())&&paired.getValue(BedBlock.FACING)==facing&&paired.getValue(BedBlock.PART)!=part)return other;
+        }
+        return null;
+    }
     public static boolean place(PhaseSession s,BlockPos clicked,Direction face,InteractionHand hand,Vec3 hit) {
         if(!s.rank.canPlace()||!mayEdit(s,clicked)||!canReachBlock(s,clicked)||!Double.isFinite(hit.x)||!Double.isFinite(hit.y)||!Double.isFinite(hit.z)||hit.distanceToSqr(Vec3.atCenterOf(clicked))>1.0)return false;
         var stack=s.player.getItemInHand(hand);if(!(stack.getItem() instanceof BlockItem item))return false;
@@ -87,7 +104,7 @@ public final class PhaseSkills {
             var state=((BlockItemAccessor)item).stillworld$placementState(context);var pos=context.getClickedPos();
             if(state==null)return false;
             states.put(pos.immutable(),state);
-            if(state.getBlock() instanceof DoorBlock||state.getBlock() instanceof DoublePlantBlock) states.put(pos.above(),state.setValue(BlockStateProperties.DOUBLE_BLOCK_HALF,DoubleBlockHalf.UPPER));
+            if(isVerticalPair(state)) states.put(pos.above(),state.setValue(BlockStateProperties.DOUBLE_BLOCK_HALF,DoubleBlockHalf.UPPER));
             if(state.getBlock() instanceof BedBlock) states.put(pos.relative(state.getValue(BedBlock.FACING)),state.setValue(BedBlock.PART,BedPart.HEAD));
             return true;
         });
@@ -126,15 +143,27 @@ public final class PhaseSkills {
         }
         if(!s.rank.canBreak())return false;
         var original=s.snapshot().getBlockState(pos);var real=s.level.getBlockState(pos);
-        if(original.isAir()||original.getDestroySpeed(s.snapshot(),pos)<0||real!=original||FogRecovery.get(s.level).occupied(pos)) {
-            if(real!=original)message(s,"changed_block");return false;
+        var other=companion(s,pos,original);var parts=other==null?List.of(pos):List.of(pos,other);
+        var recovery=FogRecovery.get(s.level);
+        for(var part:parts) {
+            var captured=s.snapshot().getBlockState(part);var live=s.level.getBlockState(part);
+            if(!mayEdit(s,part)||captured.isAir()||captured.getDestroySpeed(s.snapshot(),part)<0||live!=captured||recovery.occupied(part)) {
+                if(live!=captured)message(s,"changed_block");return false;
+            }
         }
-        if(NeoForge.EVENT_BUS.post(new BlockEvent.BreakEvent(s.level,pos,real,s.player)).isCanceled())return false;
+        for(var part:parts)if(NeoForge.EVENT_BUS.post(new BlockEvent.BreakEvent(s.level,part,s.level.getBlockState(part),s.player)).isCanceled())return false;
         var entity=s.level.getBlockEntity(pos);var tool=s.player.getMainHandItem();
         if(!s.player.isCreative()&&s.player.hasCorrectToolForDrops(real))Block.dropResources(real,s.level,pos,entity,s.player,tool);
         if(!s.player.isCreative())tool.mineBlock(s.level,real,pos,s.player);
         if(!s.level.setBlock(pos,ModContent.GRAY_MIST.get().defaultBlockState(),3))return false;
-        FogRecovery.get(s.level).track(pos,s.id,true);edit(s,pos,Blocks.AIR.defaultBlockState(),false);return true;
+        recovery.track(pos,s.id,true);edit(s,pos,Blocks.AIR.defaultBlockState(),false);
+        // Vanilla neighbor updates already remove and drop the companion. Mirror that
+        // result only for this paired member, without breaking/dropping it a second time.
+        if(other!=null) {
+            var after=s.level.getBlockState(other);
+            if(!after.is(original.getBlock()))edit(s,other,after,false);
+        }
+        return true;
     }
     private static void edit(PhaseSession s,BlockPos pos,BlockState state,boolean placed) {
         s.snapshot().setBlockState(pos,state);var data=PhaseNetwork.message("block");data.putUUID("session",s.id);data.putLong("pos",pos.asLong());data.putInt("state",Block.getId(state));data.putBoolean("placed",placed);PhaseNetwork.sendState(s.player,data);

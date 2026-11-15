@@ -3,7 +3,7 @@ loaderVersion="[4,)"
 license="All Rights Reserved"
 [[mods]]
 modId="stillworld"
-version="0.2.5"
+version="0.2.6"
 displayName="Stillworld"
 description='''A frozen monochrome reflection of reality, accessed through Curios accessories.'''
 [[mixins]]
