@@ -1,0 +1,11 @@
+{
+  "type": "neoforge:add_features",
+  "biomes": "#minecraft:is_overworld",
+  "features": [
+    "stillworld:ore_stillworld_small",
+    "stillworld:ore_stillworld_medium",
+    "stillworld:ore_stillworld_large",
+    "stillworld:ore_stillworld_buried"
+  ],
+  "step": "underground_ores"
+}

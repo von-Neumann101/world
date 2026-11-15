@@ -1,6 +1,12 @@
 {
   "replace": false,
   "values": [
-    "stillworld:distortion_treatment_machine"
+    "stillworld:distortion_treatment_machine",
+    "stillworld:distortion_stabilizer",
+    "stillworld:overworld_stabilizer_auxiliary",
+    "stillworld:nether_stabilizer_auxiliary",
+    "stillworld:end_stabilizer_auxiliary",
+    "stillworld:stillworld_ore",
+    "stillworld:deepslate_stillworld_ore"
   ]
 }

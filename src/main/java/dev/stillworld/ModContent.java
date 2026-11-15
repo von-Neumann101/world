@@ -19,8 +19,7 @@ public final class ModContent {
     public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(Stillworld.ID);
     public static final net.neoforged.neoforge.registries.DeferredBlock<dev.stillworld.block.MistBlock> BLACK_MIST = BLOCKS.register("black_mist", () -> new dev.stillworld.block.MistBlock(true));
     public static final net.neoforged.neoforge.registries.DeferredBlock<dev.stillworld.block.MistBlock> GRAY_MIST = BLOCKS.register("gray_mist", () -> new dev.stillworld.block.MistBlock(false));
-    // Reserved workstation: treatment rules and recipes are deliberately not implemented yet.
-    public static final net.neoforged.neoforge.registries.DeferredBlock<net.minecraft.world.level.block.Block> TREATMENT_MACHINE = BLOCKS.register("distortion_treatment_machine", () -> new net.minecraft.world.level.block.Block(net.minecraft.world.level.block.state.BlockBehaviour.Properties.of().strength(3.5f).requiresCorrectToolForDrops()));
+    public static final net.neoforged.neoforge.registries.DeferredBlock<dev.stillworld.workshop.TreatmentBlock> TREATMENT_MACHINE = BLOCKS.register("distortion_treatment_machine", dev.stillworld.workshop.TreatmentBlock::new);
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(Stillworld.ID);
     public static final DeferredItem<BlockItem> TREATMENT_MACHINE_ITEM = ITEMS.registerSimpleBlockItem(TREATMENT_MACHINE);
     public static final Map<Rank, DeferredItem<PhaseCharmItem>> CHARMS = new EnumMap<>(Rank.class);
@@ -35,9 +34,9 @@ public final class ModContent {
         TAB = TABS.register("stillworld", () -> CreativeModeTab.builder()
                 .title(Component.translatable("itemGroup.stillworld"))
                 .icon(() -> CHARMS.get(Rank.RANK1).get().getDefaultInstance())
-                .displayItems((parameters, output) -> { CHARMS.values().forEach(output::accept); output.accept(BLADE); output.accept(TREATMENT_MACHINE_ITEM); }).build());
+                .displayItems((parameters, output) -> { CHARMS.values().forEach(output::accept); output.accept(BLADE); output.accept(TREATMENT_MACHINE_ITEM); dev.stillworld.workshop.WorkshopContent.creative(output); }).build());
     }
-    public static void register(IEventBus bus) { BLOCKS.register(bus); ITEMS.register(bus); TABS.register(bus); ATTACHMENTS.register(bus); }
+    public static void register(IEventBus bus) { dev.stillworld.workshop.WorkshopContent.register(bus); BLOCKS.register(bus); ITEMS.register(bus); TABS.register(bus); ATTACHMENTS.register(bus); }
     public static Rank equippedRank(Player player) {
         var inventory = CuriosApi.getCuriosInventory(player);
         if (inventory.isEmpty()) return null;

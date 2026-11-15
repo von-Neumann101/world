@@ -4,6 +4,7 @@
   "package": "dev.stillworld.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "TreatmentCrouchMixin",
     "BlockItemAccessor",
     "ChunkPacketAccessor",
     "ChunkMapAccessor",

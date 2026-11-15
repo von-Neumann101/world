@@ -60,6 +60,7 @@ public final class PhaseManager {
         var rank = ModContent.equippedRank(player);
         if (rank == null || get(player) != null || !player.isAlive() || player.isSpectator() || player.isPassenger() || player.isSleeping()) return false;
         if (!PsycheManager.ready(player)) return false;
+        dev.stillworld.workshop.TreatmentBlock.beforePhaseEntry(player);
         var session = new PhaseSession(player, rank);
         for (var holder : ((ChunkMapAccessor)(Object) session.level.getChunkSource().chunkMap).stillworld$chunks()) {
             if (holder.getLatestChunk() instanceof LevelChunk chunk) session.snapshot().capture(chunk);
