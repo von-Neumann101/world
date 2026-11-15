@@ -60,7 +60,7 @@ public final class RealityWorld {
                 originalData.getClearColorScale() == 1.0F);
         data.setDifficultyLocked(originalData.isDifficultyLocked());
         data.getGameRules().assignFrom(originalData.getGameRules(), null);
-        viewRadius = minecraft.options.renderDistance().get();
+        viewRadius = minecraft.options.getEffectiveRenderDistance();
         try {
             var newLevel = new MirrorLevel(source, data, newRenderer, viewRadius);
             session = newSession;
@@ -103,7 +103,10 @@ public final class RealityWorld {
         } else if (packet instanceof ClientboundSectionBlocksUpdatePacket blocks) {
             blocks.runUpdates((pos, state) -> target.setServerVerifiedBlockState(pos, state, 19));
         } else if (packet instanceof ClientboundLightUpdatePacket light) {
-            target.queueLightUpdate(() -> applyLight(target, light.getX(), light.getZ(), light.getLightData()));
+            updateViewCenter(target);
+            if (target.getChunkSource().getChunk(light.getX(), light.getZ(), false) != null) {
+                target.queueLightUpdate(() -> applyLight(target, light.getX(), light.getZ(), light.getLightData()));
+            }
         } else if (packet instanceof ClientboundBlockEntityDataPacket blockEntity) {
             if (!blockEntity.getTag().isEmpty()) {
                 target.getBlockEntity(blockEntity.getPos(), blockEntity.getType()).ifPresent(entity ->
@@ -197,32 +200,30 @@ public final class RealityWorld {
     }
 
     private static void updateViewCenter(MirrorLevel target) {
-        var player = Minecraft.getInstance().player;
+        var minecraft = Minecraft.getInstance();
+        var player = minecraft.player;
         if (player != null) {
             var center = player.chunkPosition();
             target.getChunkSource().updateViewCenter(center.x, center.z);
+        }
+        int radius = minecraft.options.getEffectiveRenderDistance();
+        if (radius != viewRadius) {
+            viewRadius = radius;
+            target.getChunkSource().updateViewRadius(radius);
         }
     }
 
     private static void acceptChunk(MirrorLevel target, ClientboundLevelChunkWithLightPacket packet) {
         updateViewCenter(target);
-        var player = Minecraft.getInstance().player;
-        if (player != null) {
-            var center = player.chunkPosition();
-            int needed = Math.max(Math.abs(packet.getX() - center.x), Math.abs(packet.getZ() - center.z));
-            // These are already server-tracked chunks. Growing this local cache loads no world chunks.
-            if (needed > viewRadius) {
-                viewRadius = needed;
-                target.getChunkSource().updateViewRadius(viewRadius);
-            }
-        }
         var data = packet.getChunkData();
-        target.getChunkSource().replaceWithPacketData(packet.getX(), packet.getZ(), data.getReadBuffer(),
+        var chunk = target.getChunkSource().replaceWithPacketData(packet.getX(), packet.getZ(), data.getReadBuffer(),
                 data.getHeightmaps(), data.getBlockEntitiesTagsConsumer(packet.getX(), packet.getZ()));
+        if (chunk == null) return;
         target.queueLightUpdate(() -> {
+            // A view change or forget packet may evict this chunk before queued lighting is applied.
+            if (target.getChunkSource().getChunk(packet.getX(), packet.getZ(), false) != chunk) return;
             applyLight(target, packet.getX(), packet.getZ(), packet.getLightData());
-            var chunk = target.getChunkSource().getChunk(packet.getX(), packet.getZ(), false);
-            if (chunk != null) enableChunkLight(target, chunk);
+            enableChunkLight(target, chunk);
         });
     }
 
@@ -238,6 +239,7 @@ public final class RealityWorld {
     }
 
     private static void applyLight(MirrorLevel target, int x, int z, ClientboundLightUpdatePacketData data) {
+        if (target.getChunkSource().getChunk(x, z, false) == null) return;
         var light = target.getLightEngine();
         readLightSections(target, x, z, light, LightLayer.SKY,
                 data.getSkyYMask(), data.getEmptySkyYMask(), data.getSkyUpdates().iterator());

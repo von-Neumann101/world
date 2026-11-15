@@ -3,6 +3,7 @@ package dev.stillworld.server;
 import dev.stillworld.ModContent;
 import dev.stillworld.mixin.ChunkMapAccessor;
 import dev.stillworld.network.PhaseNetwork;
+import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
@@ -15,6 +16,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.vehicle.DismountHelper;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.NeoForge;
@@ -144,17 +146,48 @@ public final class PhaseManager {
         // The session has already been removed, so this checks reality's collisions.
         // An absolute teleport also zeros client velocity, even at the same position.
         if (session.level.noCollision(player, player.getBoundingBox())) return;
-        Vec3 found = null;
+        Vec3 target = null;
         search: for (int radius = 1; radius <= 8; radius++) for (int y = 0; y <= radius; y++)
             for (int x = -radius; x <= radius; x++) for (int z = -radius; z <= radius; z++) {
-                var delta = new Vec3(x, y, z);
-                if (session.level.noCollision(player, player.getBoundingBox().move(delta))) { found = player.position().add(delta); break search; }
+                target = safeExitCandidate(player, player.blockPosition().offset(x, y, z));
+                if (target != null) break search;
             }
-        Vec3 target = found == null ? session.entry : found;
+        // Entry is only a fallback candidate: reality may have changed there too.
+        if (target == null) target = safeExitCandidate(player, BlockPos.containing(session.entry));
+        if (target == null) target = safeExitAbove(player, player.blockPosition().above(9));
+        if (target == null) target = safeExitAbove(player, BlockPos.containing(session.entry).above());
+        // Lifecycle cleanup must finish even when no safe landing exists. Never
+        // substitute an unchecked teleport or create a platform in the real world.
+        if (target == null) return;
         player.fallDistance = 0;
         player.setDeltaMovement(Vec3.ZERO);
         if (player.connection != null) player.connection.teleport(target.x, target.y, target.z, player.getYRot(), player.getXRot());
         else player.setPos(target);
+    }
+    private static Vec3 safeExitAbove(ServerPlayer player, BlockPos start) {
+        for (int y = Math.max(start.getY(), player.serverLevel().getMinBuildHeight()); y < player.serverLevel().getMaxBuildHeight(); y++) {
+            var target = safeExitCandidate(player, new BlockPos(start.getX(), y, start.getZ()));
+            if (target != null) return target;
+        }
+        return null;
+    }
+    private static Vec3 safeExitCandidate(ServerPlayer player, BlockPos pos) {
+        var level = player.serverLevel();
+        if (level.isOutsideBuildHeight(pos)) return null;
+        // Vanilla's floor search handles partial-height support and rejects voids,
+        // harmful floors, blocked standing space and positions outside the border.
+        var target = DismountHelper.findSafeDismountLocation(player.getType(), level, pos, true);
+        if (target == null) return null;
+        var box = player.getType().getDimensions().makeBoundingBox(target)
+                .minmax(player.getBoundingBox().move(target.subtract(player.position())));
+        if (box.minY < level.getMinBuildHeight() || box.maxY > level.getMaxBuildHeight() || !level.noCollision(player, box)) return null;
+        // Include head space and the contact surface, not just the feet block.
+        for (var contact : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY - .001, box.minZ),
+                BlockPos.containing(box.maxX, box.maxY, box.maxZ))) {
+            var state = level.getBlockState(contact);
+            if (!state.getFluidState().isEmpty() || player.getType().isBlockDangerous(state)) return null;
+        }
+        return target;
     }
     public static void handle(ServerPlayer player, CompoundTag data) {
         String op = data.getString("op");

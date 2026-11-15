@@ -19,6 +19,7 @@ public final class PhaseSession {
     public final Set<UUID> laterEntities = new HashSet<>();
     public final DamageLedger damage = new DamageLedger();
     public final Map<net.minecraft.core.BlockPos,net.minecraft.world.level.block.state.BlockState> placedBefore = new LinkedHashMap<>();
+    final Map<net.minecraft.core.BlockPos,List<net.minecraft.core.BlockPos>> placementGroups = new HashMap<>();
     public final Map<UUID,EntitySnapshot> marked = new LinkedHashMap<>();
     public final Set<UUID> dead = new HashSet<>();
     public final Map<UUID,dev.stillworld.core.Slash> slashes = new LinkedHashMap<>();

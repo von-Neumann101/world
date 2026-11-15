@@ -1,6 +1,7 @@
 package dev.stillworld.server;
 import dev.stillworld.ModContent;
 import dev.stillworld.core.Slash;
+import dev.stillworld.mixin.BlockItemAccessor;
 import dev.stillworld.network.PhaseNetwork;
 import dev.stillworld.snapshot.SnapshotReadContext;
 import net.minecraft.core.BlockPos;
@@ -9,6 +10,7 @@ import net.minecraft.nbt.*;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundBlockDestructionPacket;
 import net.minecraft.server.level.*;
+import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.*;
@@ -26,6 +28,8 @@ import net.minecraft.world.level.block.state.properties.*;
 import net.minecraft.world.phys.*;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.common.CommonHooks;
+import net.neoforged.neoforge.common.NeoForgeMod;
 import net.neoforged.neoforge.common.util.BlockSnapshot;
 import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -76,8 +80,12 @@ public final class PhaseSkills {
         var states=new LinkedHashMap<BlockPos,BlockState>();
         boolean valid=SnapshotReadContext.with(s.snapshot(),()->{
             var context=new BlockPlaceContext(new UseOnContext(s.player,hand,new BlockHitResult(hit,face,clicked,false)));
-            var state=item.getBlock().getStateForPlacement(context);var pos=context.getClickedPos();
-            if(state==null||!context.canPlace()||!state.canSurvive(s.level,pos))return false;
+            if(!context.canPlace())return false;
+            context=item.updatePlacementContext(context);if(context==null)return false;
+            // Preserve the item's virtual variant selection (wall torches, signs,
+            // etc.) while keeping actual placement in our owned mist transaction.
+            var state=((BlockItemAccessor)item).stillworld$placementState(context);var pos=context.getClickedPos();
+            if(state==null)return false;
             states.put(pos.immutable(),state);
             if(state.getBlock() instanceof DoorBlock||state.getBlock() instanceof DoublePlantBlock) states.put(pos.above(),state.setValue(BlockStateProperties.DOUBLE_BLOCK_HALF,DoubleBlockHalf.UPPER));
             if(state.getBlock() instanceof BedBlock) states.put(pos.relative(state.getValue(BedBlock.FACING)),state.setValue(BedBlock.PART,BedPart.HEAD));
@@ -99,14 +107,22 @@ public final class PhaseSkills {
                 for(int i=rollback.size()-1;i>=0;i--)rollback.get(i).restore();return false;
             }
         }
-        states.forEach((pos,state)->{s.placedBefore.put(pos,originals.get(pos));recovery.track(pos,s.id,false);edit(s,pos,state,true);});
+        var group=List.copyOf(states.keySet());
+        states.forEach((pos,state)->{s.placedBefore.put(pos,originals.get(pos));s.placementGroups.put(pos,group);recovery.track(pos,s.id,false);edit(s,pos,state,true);});
         if(!s.player.isCreative())stack.shrink(1);
         return true;
     }
     public static boolean breakBlock(PhaseSession s,BlockPos pos) {
         if(!mayEdit(s,pos)||!canReachBlock(s,pos))return false;
         if(s.placedBefore.containsKey(pos)) {
-            var before=s.placedBefore.remove(pos);FogRecovery.get(s.level).remove(s.level,pos,s.id);edit(s,pos,before,false);return true;
+            var group=s.placementGroups.get(pos);
+            if(group.stream().anyMatch(part->!mayEdit(s,part)))return false;
+            var recovery=FogRecovery.get(s.level);
+            for(var part:group) {
+                var before=s.placedBefore.remove(part);s.placementGroups.remove(part);
+                recovery.remove(s.level,part,s.id);edit(s,part,before,false);
+            }
+            return true;
         }
         if(!s.rank.canBreak())return false;
         var original=s.snapshot().getBlockState(pos);var real=s.level.getBlockState(pos);
@@ -155,7 +171,12 @@ public final class PhaseSkills {
         float enchantment=EnchantmentHelper.modifyDamage(s.level,weapon,target,source,base)-base;
         float damage=base*(0.2f+charge*charge*0.8f);
         damage+=weapon.getItem().getAttackDamageBonus(target,damage,source);
-        boolean critical=charge>0.9f&&player.fallDistance>0&&!player.onGround()&&!player.onClimbable()&&!player.isInWater()&&!player.hasEffect(MobEffects.BLINDNESS)&&!player.isPassenger()&&!player.isSprinting();
+        boolean critical=charge>0.9f&&player.fallDistance>0&&!player.onGround()&&!player.hasEffect(MobEffects.BLINDNESS)&&!player.isPassenger()&&!player.isSprinting()
+                &&SnapshotReadContext.with(s.snapshot(),()->{
+                    var pos=player.blockPosition();
+                    // Entity's in-block and water caches belong to the live world.
+                    return CommonHooks.isLivingOnLadder(s.snapshot().getBlockState(pos),s.level,pos,player).isEmpty()&&!inSnapshotWater(s);
+                });
         if(critical)damage*=1.5f;damage+=enchantment*charge;
         if(!Float.isFinite(damage)||damage<=0)return false;
         if(!PsycheManager.canSpend(s,4))return false;
@@ -174,6 +195,16 @@ public final class PhaseSkills {
         player.resetAttackStrengthTicker();
         if(!target.isAlive())dead(s,id);
         return accepted;
+    }
+    private static boolean inSnapshotWater(PhaseSession s) {
+        var box=s.player.getBoundingBox().deflate(.001);
+        for(var pos:BlockPos.betweenClosed(Mth.floor(box.minX),Mth.floor(box.minY),Mth.floor(box.minZ),
+                Mth.ceil(box.maxX)-1,Mth.ceil(box.maxY)-1,Mth.ceil(box.maxZ)-1)) {
+            var fluid=s.snapshot().getFluidState(pos);
+            if(fluid.getFluidType()==NeoForgeMod.WATER_TYPE.value()
+                    &&pos.getY()+fluid.getHeight(s.snapshot(),pos)>=box.minY)return true;
+        }
+        return false;
     }
     private static void slash(PhaseSession s) {
         if(!s.rank.canSlash()||!s.player.getMainHandItem().is(ModContent.BLADE.get()))return;
@@ -231,7 +262,7 @@ public final class PhaseSkills {
             }
         } finally {
             for(var id:List.copyOf(s.marked.keySet()))unlock(s,id);
-            s.slashes.clear();FogRecovery.get(s.level).finish(s.level,s.id);s.placedBefore.clear();
+            s.slashes.clear();FogRecovery.get(s.level).finish(s.level,s.id);s.placedBefore.clear();s.placementGroups.clear();
         }
     }
     private static void recover(ChunkEvent.Load event) {if(event.getLevel() instanceof ServerLevel level)FogRecovery.get(level).recoverChunk(level,event.getChunk().getPos());}

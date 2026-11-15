@@ -1,26 +1,29 @@
 package dev.stillworld.server;
 
-import dev.stillworld.mixin.ChunkMapAccessor;
 import dev.stillworld.network.RealityPayload;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundGameEventPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTimePacket;
+import net.minecraft.server.level.ChunkTrackingView;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.GameRules;
-import net.minecraft.world.level.chunk.LevelChunk;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 public final class RealitySync {
     public static void seed(PhaseSession session) {
         if (session.player.connection == null) return;
-        // Use already loaded, tracked chunks only. The orb does not add chunk tickets.
-        for (var holder : ((ChunkMapAccessor)(Object) session.level.getChunkSource().chunkMap).stillworld$chunks()) {
-            if (holder.getLatestChunk() instanceof LevelChunk chunk
-                    && session.player.getChunkTrackingView().contains(chunk.getPos().x, chunk.getPos().z)) {
+        // Same-level teleports can leave the real tracking view at the old position until the next tick.
+        // Seed the current view from already loaded chunks, without changing tracking or adding tickets.
+        int radius = Math.max(2, Math.min(session.player.requestedViewDistance(),
+                session.level.getServer().getPlayerList().getViewDistance()));
+        var view = ChunkTrackingView.of(session.player.chunkPosition(), radius);
+        view.forEach(pos -> {
+            var chunk = session.level.getChunkSource().getChunkNow(pos.x, pos.z);
+            if (chunk != null) {
                 send(session, new ClientboundLevelChunkWithLightPacket(chunk, session.level.getLightEngine(), null, null));
             }
-        }
+        });
         send(session, new ClientboundSetTimePacket(session.level.getGameTime(), session.level.getDayTime(),
                 session.level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)));
         send(session, new ClientboundGameEventPacket(session.level.isRaining()

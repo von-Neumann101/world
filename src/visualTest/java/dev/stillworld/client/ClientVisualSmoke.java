@@ -186,6 +186,8 @@ public final class ClientVisualSmoke {
                     require(RealityWorld.level().getGameTime()>frozenTime+20,"Orb world time remained frozen");
                     require(java.util.stream.StreamSupport.stream(RealityWorld.level().entitiesForRendering().spliterator(),false).anyMatch(e->e==real),"Orb did not expose the actual moving creature");
                     checkRealityPackets();
+                    MirrorCacheChecks.check();
+                    checks.add("Mirror cache rejected distant chunks/light and preserved visible terrain across view-distance changes");
                     checks.add("Live orb world updated its block/time/creature while the gameplay snapshot stayed frozen");
                     for(var entity:mc.level.entitiesForRendering())require(entity!=ghost,"A visual clone was registered as a real level entity");
                     var playerVisual=(AbstractClientPlayer)StillworldClient.ghosts().get(mc.player.getUUID());
