@@ -123,6 +123,7 @@ public final class StillworldClient {
         var mc = Minecraft.getInstance();
         if (!mc.isSameThread()) { mc.execute(() -> receive(tag)); return; }
         switch (tag.getString("op")) {
+            case "foresight" -> ForesightView.receive(tag);
             case "psyche" -> PsycheView.receive(tag);
             case "phased" -> {
                 PHASED.clear();
@@ -284,6 +285,7 @@ public final class StillworldClient {
     }
 
     private static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
+        ForesightView.clear();
         PsycheView.reset();
         clearSession(); LOCKED.clear(); PHASED.clear(); knownLevel = null;
     }
@@ -311,6 +313,7 @@ public final class StillworldClient {
     }
 
     private static void tick(ClientTickEvent.Post event) {
+        ForesightView.tick();
         var mc = Minecraft.getInstance();
         if (knownLevel != mc.level) {
             if (knownLevel != null) { clearSession(); LOCKED.clear(); }

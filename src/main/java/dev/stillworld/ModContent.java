@@ -23,6 +23,7 @@ public final class ModContent {
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(Stillworld.ID);
     public static final DeferredItem<BlockItem> TREATMENT_MACHINE_ITEM = ITEMS.registerSimpleBlockItem(TREATMENT_MACHINE);
     public static final Map<Rank, DeferredItem<PhaseCharmItem>> CHARMS = new EnumMap<>(Rank.class);
+    public static final DeferredItem<ForesightLensItem> FORESIGHT_LENS = ITEMS.register("foresight_lens", ForesightLensItem::new);
     public static final DeferredItem<SwordItem> BLADE = ITEMS.register("stillworld_blade", () -> new SwordItem(Tiers.NETHERITE,
             new Item.Properties().fireResistant().attributes(SwordItem.createAttributes(Tiers.NETHERITE, 3, -2.4f))));
     private static final DeferredRegister<CreativeModeTab> TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, Stillworld.ID);
@@ -34,7 +35,7 @@ public final class ModContent {
         TAB = TABS.register("stillworld", () -> CreativeModeTab.builder()
                 .title(Component.translatable("itemGroup.stillworld"))
                 .icon(() -> CHARMS.get(Rank.RANK1).get().getDefaultInstance())
-                .displayItems((parameters, output) -> { CHARMS.values().forEach(output::accept); output.accept(BLADE); output.accept(TREATMENT_MACHINE_ITEM); dev.stillworld.workshop.WorkshopContent.creative(output); }).build());
+                .displayItems((parameters, output) -> { CHARMS.values().forEach(output::accept); output.accept(FORESIGHT_LENS); output.accept(BLADE); output.accept(TREATMENT_MACHINE_ITEM); dev.stillworld.workshop.WorkshopContent.creative(output); }).build());
     }
     public static void register(IEventBus bus) { dev.stillworld.workshop.WorkshopContent.register(bus); BLOCKS.register(bus); ITEMS.register(bus); TABS.register(bus); ATTACHMENTS.register(bus); }
     public static Rank equippedRank(Player player) {
@@ -47,6 +48,13 @@ public final class ModContent {
                     && (result == null || charm.rank().ordinal() > result.ordinal())) result = charm.rank();
         }
         return result;
+    }
+    public static boolean hasForesight(Player player) {
+        var inventory=CuriosApi.getCuriosInventory(player);
+        if(inventory.isEmpty())return false;
+        var slots=inventory.get().getEquippedCurios();
+        for(int i=0;i<slots.getSlots();i++)if(slots.getStackInSlot(i).is(FORESIGHT_LENS))return true;
+        return false;
     }
     private ModContent() { }
 }

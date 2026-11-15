@@ -40,6 +40,7 @@ import java.util.*;
 
 public final class PhaseSkills {
     private static final Map<UUID,PhaseSession> LOCKS=new HashMap<>();
+    public static boolean isLocked(Entity entity) { return LOCKS.containsKey(entity.getUUID()); }
     private static final TicketType<UUID> MARK_TICKET=TicketType.create("stillworld_mark",Comparator.comparing(UUID::toString));
     public static void register() {
         PhaseManager.actionHandler=PhaseSkills::handle;PhaseManager.tickHandler=PhaseSkills::tick;PhaseManager.finishHandler=PhaseSkills::finish;

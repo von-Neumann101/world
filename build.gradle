@@ -43,6 +43,7 @@ neoForge {
             programArgument 'StillworldSmoke'
             systemProperty 'stillworld.visualTest.auto', 'true'
             if (providers.gradleProperty('workshopTest').isPresent()) systemProperty 'stillworld.workshopTest', 'true'
+            if (providers.gradleProperty('foresightTest').isPresent()) systemProperty 'stillworld.foresightTest', 'true'
             if (providers.gradleProperty('entryProfile').isPresent()) {
                 systemProperty 'stillworld.entryProfile', 'true'
                 jvmArgument '-XX:FlightRecorderOptions=repository=' + project.file('run/jfr').absolutePath
