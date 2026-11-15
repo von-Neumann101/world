@@ -12,6 +12,13 @@ public final class CoreTests {
         check(!Rank.RANK3.canMark() && Rank.RANK4.canMark(), "marking requires rank4");
         check(Rank.RANK4_5.canMark() && Rank.RANK4_5.canSeeLive() && !Rank.RANK4_5.defersDamage(), "rank4.5 adds live sight without deferred damage");
         check(Rank.RANK5.defersDamage() && !Rank.RANK5.canSlash() && Rank.RANK6.canSlash(), "slash permission remains separate");
+        check(Rank.INFINITY.canPlace() && Rank.INFINITY.canBreak() && Rank.INFINITY.canMark()
+                && Rank.INFINITY.canSeeLive() && Rank.INFINITY.defersDamage() && Rank.INFINITY.canSlash(), "infinity includes every rank6 skill");
+        check(Rank.INFINITY.unlimitedPsyche() && !Rank.RANK6.unlimitedPsyche(), "infinity exemption does not change ordinary ranks");
+        check(Rank.RANK6.ordinal()==6 && Rank.INFINITY.ordinal()==7, "new rank preserves existing wire identities");
+        for(String name:new String[]{"infinity","INF","\u221e","\u267e","\u267e\ufe0f"})
+            check(Rank.fromCommand(name).orElseThrow()==Rank.INFINITY,"infinity command spelling "+name);
+        check(Rank.fromCommand("4.5").orElseThrow()==Rank.RANK4_5 && Rank.fromCommand("7").isEmpty(),"existing ranks and invalid input remain distinct");
         var ledger = new DamageLedger();
         var a = UUID.randomUUID();
         var b = UUID.randomUUID();

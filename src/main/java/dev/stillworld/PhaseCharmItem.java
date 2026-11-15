@@ -14,5 +14,6 @@ public final class PhaseCharmItem extends Item implements ICurioItem {
     public Rank rank() { return rank; }
     @Override public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> lines, TooltipFlag flags) {
         lines.add(Component.translatable("tooltip.stillworld.charm", rank.label()));
+        if(rank.unlimitedPsyche())lines.add(Component.translatable("tooltip.stillworld.infinity"));
     }
 }

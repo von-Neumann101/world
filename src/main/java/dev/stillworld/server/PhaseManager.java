@@ -92,7 +92,7 @@ public final class PhaseManager {
         }
         session.actors.values().forEach(visual -> sendActor(session, visual));
         broadcast(player.getServer());
-        PsycheManager.switched(player);
+        PsycheManager.switched(player,rank);
         return true;
     }
     private static void sendActor(PhaseSession session, CompoundTag visual) {
@@ -118,7 +118,8 @@ public final class PhaseManager {
             }
             if (player.isAlive() && player.serverLevel() == session.level) safeExit(player, session);
             broadcast(player.getServer());
-            PsycheManager.switched(player);
+            if(player.isCreative())PsycheManager.data(player).energy=100;
+            PsycheManager.switched(player,session.rank);
         }
     }
     /** Ordinary key/command exit obeys the timer; lifecycle cleanup must always be possible. */

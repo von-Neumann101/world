@@ -30,7 +30,7 @@ public final class ModContent {
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB;
     static {
         for (Rank rank : Rank.values()) {
-            CHARMS.put(rank, ITEMS.register("rank" + rank.label().replace('.', '_') + "_charm", () -> new PhaseCharmItem(rank)));
+            CHARMS.put(rank, ITEMS.register(rank.charmId(), () -> new PhaseCharmItem(rank)));
         }
         TAB = TABS.register("stillworld", () -> CreativeModeTab.builder()
                 .title(Component.translatable("itemGroup.stillworld"))

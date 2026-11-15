@@ -31,5 +31,7 @@
   "hud.stillworld.doom": "生命崩溃：%s 秒",
   "message.stillworld.low_psyche": "灵能不足，需要 %s 点。",
   "message.stillworld.switch_cooldown": "还需 %s 秒才能切换。",
-  "message.stillworld.forced_exit": "强行退出：失去 40% 生命上限，40 秒后死亡。"
+  "message.stillworld.forced_exit": "强行退出：失去 40% 生命上限，40 秒后死亡。",
+  "item.stillworld.rank_infinity_charm": "寂界饰印 · rank∞",
+  "tooltip.stillworld.infinity": "管理员测试：灵能照常下降，技能无灵能限制，切换无冷却。"
 }

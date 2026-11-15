@@ -2,6 +2,7 @@ package dev.stillworld.server;
 
 import dev.stillworld.ModContent;
 import dev.stillworld.Stillworld;
+import dev.stillworld.core.Rank;
 import dev.stillworld.network.PhaseNetwork;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -32,25 +33,30 @@ public final class PsycheManager {
     public static int cost(PhaseSession s,int base) { return base*(far(s)?2:1); }
     public static boolean canSpend(PhaseSession s,int base) {
         int cost=cost(s,base);
-        if(data(s.player).energy>=cost)return true;
+        if(s.rank.unlimitedPsyche()||data(s.player).energy>=cost)return true;
         s.player.displayClientMessage(Component.translatable("message.stillworld.low_psyche",cost),true);
         return false;
     }
     public static void spend(PhaseSession s,int base) {
         data(s.player).energy=Math.max(0,data(s.player).energy-cost(s,base));sync(s.player);
     }
+    public static int cooldown(ServerPlayer p) {
+        var session=PhaseManager.get(p);var rank=session==null?ModContent.equippedRank(p):session.rank;
+        return rank!=null&&rank.unlimitedPsyche()?0:data(p).cooldownTicks;
+    }
     public static boolean ready(ServerPlayer p) {
-        if(data(p).cooldownTicks==0)return true;
-        p.displayClientMessage(Component.translatable("message.stillworld.switch_cooldown",(data(p).cooldownTicks+19)/20),true);
+        if(cooldown(p)==0)return true;
+        p.displayClientMessage(Component.translatable("message.stillworld.switch_cooldown",(cooldown(p)+19)/20),true);
         return false;
     }
-    public static void switched(ServerPlayer p) { data(p).cooldownTicks=SWITCH_TICKS;sync(p); }
+    public static void switched(ServerPlayer p,Rank rank) { data(p).cooldownTicks=rank.unlimitedPsyche()?0:SWITCH_TICKS;sync(p); }
     public static void payExit(PhaseSession s) {
         // A healthy End-return player is already removed before Clone is posted.
         // Removal is a lifecycle state, not death; its exit still has a cost.
         if(s.player.getHealth()<=0||!far(s))return;
         var data=data(s.player);
-        if(data.energy>=40)data.energy-=40;
+        if(s.rank.unlimitedPsyche())data.energy=Math.max(0,data.energy-40);
+        else if(data.energy>=40)data.energy-=40;
         else {
             data.energy=0;
             loseFraction(s.player,.4);
@@ -88,7 +94,7 @@ public final class PsycheManager {
             if(++s.psycheTicks%40==0)data.energy=Math.max(0,data.energy-(far?2:1));
             if(data.energy==0) {
                 s.exhaustedTicks++;
-                if(s.exhaustedTicks>=200&&(s.exhaustedTicks-200)%40==0) {
+                if(!s.rank.unlimitedPsyche()&&s.exhaustedTicks>=200&&(s.exhaustedTicks-200)%40==0) {
                     float max=p.getMaxHealth();
                     if(max<=1.0001f){kill(p);return;}
                     loseFraction(p,1.0/max);
@@ -112,7 +118,7 @@ public final class PsycheManager {
     private static void respawn(PlayerEvent.PlayerRespawnEvent e) { if(e.getEntity() instanceof ServerPlayer p){applyHealth(p);sync(p);} }
     public static void sync(ServerPlayer p) {
         var state=data(p);var s=PhaseManager.get(p);var tag=PhaseNetwork.message("psyche");
-        tag.putInt("energy",state.energy);tag.putInt("cooldownTicks",state.cooldownTicks);tag.putInt("doomTicks",state.doomTicks);
+        tag.putInt("energy",state.energy);tag.putInt("cooldownTicks",cooldown(p));tag.putInt("doomTicks",state.doomTicks);
         tag.putInt("exhaustedTicks",s==null?0:s.exhaustedTicks);tag.putBoolean("far",s!=null&&far(s));
         PhaseNetwork.sendState(p,tag);
     }
