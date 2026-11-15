@@ -18,7 +18,7 @@ import static org.lwjgl.opengl.GL33C.*;
 public final class SpatialShaderProbe {
     private static int W=640, H=360;
     private static final int FW=32,FH=18;
-    private int spatialProgram,distanceProgram,blurProgram;
+    private int spatialProgram,distanceProgram,blurProgram,programForContours;
     private final int radial=texture(GL_RGBA8,GL_RGBA,FW,FH),radialSwap=texture(GL_RGBA8,GL_RGBA,FW,FH);
     private static final String VERTEX="""
             #version 150
@@ -32,6 +32,7 @@ public final class SpatialShaderProbe {
     private final int target=texture(GL_RGBA32F,GL_RGBA), framebuffer=glGenFramebuffers();
     private final StringBuilder report=new StringBuilder();
     private int checks;
+    private float danger,farEntry;
 
     public static void main(String[] args) throws Exception {
         if(args.length>=4){W=Integer.parseInt(args[2]);H=Integer.parseInt(args[3]);}
@@ -68,7 +69,7 @@ public final class SpatialShaderProbe {
         distanceProgram=program(shaders.resolve("radial_distance.fsh"));
         blurProgram=program(shaders.resolve("radial_blur.fsh"));
         checkRadialCurve();
-        int contours=program(shaders.resolve("contours.fsh"));
+        int contours=programForContours=program(shaders.resolve("contours.fsh"));
         int monochrome=program(shaders.resolve("monochrome.fsh"));
         var camera=new Vector3f();
         var matrix=projection(70,0,0,camera);
@@ -163,7 +164,62 @@ public final class SpatialShaderProbe {
         }
         int error=glGetError();check(error==GL_NO_ERROR,"OpenGL error state is clear: "+error);
         Files.writeString(output.resolve("result.txt"),"PASS "+checks+" checks\nGPU: "+glGetString(GL_RENDERER)+"\n"+report);
+        checkDanger(monochrome,spatial,matrix,camera,sky,colors,far,output);
         System.out.println("SPATIAL SHADER PASS: "+checks+" checks; hidden context; evidence "+output);
+    }
+
+    private void checkDanger(int mono,int spatial,Matrix4f matrix,Vector3f camera,float[] sky,float[] colors,float[] distant,Path output) throws Exception {
+        // Measure continuous coordinates, as above; the preceding scene screenshots use nearest filtering.
+        glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,color);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+        upload(edges,GL_RGBA,new float[W*H*4]);
+        float[] tone=new float[W*H*4];Arrays.fill(tone,.2f);
+        double previous=2;
+        for(float amount:new float[]{0,.25f,.5f,.75f,1}) {
+            danger=amount;float[] result=render(mono,tone,sky,matrix,camera,1,1,5);
+            double value=result[(H/2*W+W/2)*4];
+            check(value<previous,"exhausted sky darkens progressively at "+amount);
+            if(amount==1)check(value<.0001,"exhaustion reaches fully black sky");
+            if(amount==.25f)check(value>.3,"early exhaustion does not snap sky to black");
+            previous=value;
+        }
+        danger=0;
+        double[][] brightness=new double[2][3];
+        for(int t=0;t<2;t++)for(int d=0;d<3;d++) {
+            Arrays.fill(tone,t==0?.08f:.8f);
+            float[] result=render(mono,tone,plane(matrix,64+d*64),matrix,camera,1,1,5);
+            brightness[t][d]=result[(H/2*W+W/2)*4];
+        }
+        check(brightness[0][2]<brightness[0][1]&&brightness[0][1]<brightness[0][0],"far shadows deepen with distance");
+        check(brightness[0][0]-brightness[0][2]>.12,"far shadow change is noticeable");
+        check(Math.abs(brightness[1][2]-brightness[1][0])<.08,"lit surfaces retain brightness and texture headroom");
+        Arrays.fill(tone,.08f);
+        float[] below=render(mono,tone,plane(matrix,63.9f),matrix,camera,1,1,5);
+        float[] above=render(mono,tone,plane(matrix,64.1f),matrix,camera,1,1,5);
+        check(maxDifference(below,above)<.004,"far-zone darkness starts continuously");
+        float[] baseline=render(spatial,colors,distant,matrix,camera,1,1,5);
+        farEntry=1;float[] entered=render(spatial,colors,distant,matrix,camera,1,1,5);
+        check(meanDisplacement(colors,entered)>meanDisplacement(colors,baseline)*1.10,"far entry adds a perceptible distortion boost");
+        danger=1;float[] depleted=render(spatial,colors,distant,matrix,camera,1,1,5);
+        check(meanDisplacement(colors,depleted)>meanDisplacement(colors,entered)*1.8,"depletion rapidly amplifies spatial distortion");
+        check(regionDifference(colors,depleted,W/2-10,H/2-10,W/2+10,H/2+10)<.00001,"exhaustion preserves crosshair alignment");
+        check(borderDifference(colors,depleted)<.00001,"exhaustion preserves screen edges");
+        System.out.println("Depleted field curvature="+maxFieldCurvature(colors,depleted)+", jacobian="+minJacobian(depleted));
+        check(maxFieldCurvature(colors,depleted)<.15,"exhaustion retains a smooth field without sharp displacement boundaries");
+        check(minJacobian(depleted)>.05,"exhaustion does not fold the field");
+        write(output.resolve("exhaustion-field.png"),depleted);
+        var scene=fixture(matrix,camera,false);
+        for(int stage=0;stage<3;stage++) {
+            danger=stage==2?1:0;farEntry=stage>0?1:0;
+            var offset=stage==0?camera:new Vector3f(160,0,0);
+            float[] edgesNow=render(programForContours,scene[0],scene[1],matrix,offset,1,1,5);
+            upload(edges,GL_RGBA,edgesNow);
+            float[] shaded=render(mono,scene[0],scene[1],matrix,offset,1,1,5);
+            float[] result=render(spatial,shaded,scene[1],matrix,offset,1,1,5);
+            write(output.resolve("danger-scene-"+stage+".png"),result);
+        }
+        danger=farEntry=0;
+        Files.writeString(output.resolve("result.txt"),"PASS "+checks+" checks\nGPU: "+glGetString(GL_RENDERER)+"\n"+report);
     }
 
     private float[] render(int program,float[] rgba,float[] depths,Matrix4f matrix,Vector3f camera,float progress,float strength,float elapsed) {
@@ -178,6 +234,7 @@ public final class SpatialShaderProbe {
         glUniform3f(glGetUniformLocation(program,"CameraFromOrigin"),camera.x,camera.y,camera.z);
         uniform(program,"ScanProgress",progress);uniform(program,"ScanRadius",progress*progress*256);
         uniform(program,"ScanRange",256);uniform(program,"DistortionStrength",strength);uniform(program,"Elapsed",elapsed);
+        uniform(program,"Exhaustion",danger);uniform(program,"FarEntry",farEntry);
         glBindFramebuffer(GL_FRAMEBUFFER,framebuffer);glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,target,0);
         glViewport(0,0,W,H);glDisable(GL_DEPTH_TEST);glDisable(GL_BLEND);
         glDrawArrays(GL_TRIANGLES,0,3);
@@ -228,6 +285,17 @@ public final class SpatialShaderProbe {
             float distance=-dot+(float)Math.sqrt(dot*dot+radius*radius-camera.lengthSquared());
             p=matrix.transform(new Vector4f(ray.mul(distance),1));result[y*W+x]=p.z/p.w*.5f+.5f;
         }return result;
+    }
+    private static double maxFieldCurvature(float[] base,float[] warped) {
+        double max=0;
+        for(int y=1;y<H-1;y++)for(int x=1;x<W-1;x++) {
+            int a=(y*W+x)*4;
+            for(int step:new int[]{4,W*4}) {
+                double dx=((warped[a-step]-base[a-step])-2*(warped[a]-base[a])+(warped[a+step]-base[a+step]))*W/.7;
+                double dy=((warped[a-step+1]-base[a-step+1])-2*(warped[a+1]-base[a+1])+(warped[a+step+1]-base[a+step+1]))*H/.7;
+                max=Math.max(max,Math.hypot(dx,dy));
+            }
+        }return max;
     }
     private static double maxFieldStep(float[] base,float[] warped) {
         double max=0;

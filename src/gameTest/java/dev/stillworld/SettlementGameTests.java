@@ -75,7 +75,7 @@ public final class SettlementGameTests {
         h.assertTrue(!PhaseSkills.mark(s,cow.getUUID()),"rank1 cannot mark");
         h.assertTrue(!PhaseSkills.attack(s,cow.getUUID()),"rank1 cannot attack");
         h.assertTrue(p.getMainHandItem().getCount()==2,"rejected placement consumes nothing");
-        PhaseManager.exit(p);SessionGameTests.equip(p,Rank.RANK2);PhaseManager.enter(p);SkillGameTests.aim(p,hit);
+        PhaseManager.exit(p);SessionGameTests.equip(p,Rank.RANK2);PsycheManager.data(p).cooldownTicks=0;PhaseManager.enter(p);SkillGameTests.aim(p,hit);
         h.assertTrue(!PhaseSkills.breakBlock(PhaseManager.get(p),block),"rank2 cannot break original blocks");
         h.assertTrue(h.getLevel().getBlockState(block).is(Blocks.STONE),"rejected actions leave reality intact");
         PhaseManager.exit(p);h.succeed();

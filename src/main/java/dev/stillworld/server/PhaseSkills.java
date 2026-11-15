@@ -140,9 +140,11 @@ public final class PhaseSkills {
         if(LOCKS.containsKey(id)){message(s,"already_marked");return false;}
         if(!(s.level.getEntity(id) instanceof LivingEntity target)||target instanceof Player||!target.isAlive())return false;
         if(target instanceof EnderDragon||target.isPassenger()||target.isVehicle()||(target instanceof Mob mob&&mob.isLeashed())){message(s,"linked_target");return false;}
+        if(!PsycheManager.canSpend(s,20))return false;
         var snapshot=new EntitySnapshot(s.actors.get(id));snapshot.restoreAndFreeze(target);s.marked.put(id,snapshot);LOCKS.put(id,s);
         s.level.getChunkSource().addRegionTicket(MARK_TICKET,new ChunkPos(BlockPos.containing(snapshot.position)),2,id);
         var data=PhaseNetwork.message("freeze");data.putUUID("uuid",id);data.put("visual",snapshot.visual);broadcast(s.level,data);
+        PsycheManager.spend(s,20);
         return true;
     }
     public static boolean attack(PhaseSession s,UUID id) {
@@ -156,10 +158,12 @@ public final class PhaseSkills {
         boolean critical=charge>0.9f&&player.fallDistance>0&&!player.onGround()&&!player.onClimbable()&&!player.isInWater()&&!player.hasEffect(MobEffects.BLINDNESS)&&!player.isPassenger()&&!player.isSprinting();
         if(critical)damage*=1.5f;damage+=enchantment*charge;
         if(!Float.isFinite(damage)||damage<=0)return false;
+        if(!PsycheManager.canSpend(s,4))return false;
         boolean accepted;
         if(s.rank.defersDamage()) {
             s.damage.add(id,damage);accepted=true;
         } else accepted=target.hurt(source,damage*0.8f);
+        if(accepted)PsycheManager.spend(s,4);
         if(accepted&&!weapon.isEmpty()&&!player.isCreative()) {
             // The phase permits damage recording, not arbitrary real-world hit
             // callbacks (e.g. the mace's area launch). Preserve vanilla wear.
@@ -174,8 +178,10 @@ public final class PhaseSkills {
     private static void slash(PhaseSession s) {
         if(!s.rank.canSlash()||!s.player.getMainHandItem().is(ModContent.BLADE.get()))return;
         if(s.slashes.size()>=16){message(s,"slash_limit");return;}
+        if(!PsycheManager.canSpend(s,40))return;
         var center=s.player.getEyePosition().add(s.player.getLookAngle().scale(2));var slash=new Slash(center.x,center.y,center.z,s.player.getYRot(),s.player.getXRot());s.slashes.add(slash);
         var data=PhaseNetwork.message("slash");data.putUUID("session",s.id);data.putDouble("cx",center.x);data.putDouble("cy",center.y);data.putDouble("cz",center.z);data.putFloat("yaw",slash.yaw());data.putFloat("pitch",slash.pitch());PhaseNetwork.sendState(s.player,data);
+        PsycheManager.spend(s,40);
     }
     private static void tick(PhaseSession s) {
         if(s.mining!=null) {

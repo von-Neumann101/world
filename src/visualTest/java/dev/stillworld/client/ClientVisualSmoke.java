@@ -263,7 +263,7 @@ public final class ClientVisualSmoke {
                             &&translucent.height==RealityOrbRenderer.scene().height,"View-distance change lost half-size Fabulous targets");
                     mc.options.renderDistance().set(originalRenderDistance);originalRenderDistance=0;
                     mc.options.graphicsMode().set(net.minecraft.client.GraphicsStatus.FANCY);mc.levelRenderer.allChanged();
-                    onServer(p->p.connection.teleport(ENTRY.x,ENTRY.y,ENTRY.z,0,0));advance(Step.ORB_RESTORED);
+                    onServer(p->{p.connection.teleport(ENTRY.x,ENTRY.y,ENTRY.z,0,0);dev.stillworld.server.PsycheManager.setEnergy(p,100);});advance(Step.ORB_RESTORED);
                 }
                 case ORB_RESTORED -> {
                     aim(COW.add(0,.85,0));if(!serverDone||age<25)return;advance(Step.MARK);
@@ -311,7 +311,7 @@ public final class ClientVisualSmoke {
                     if(age<15||!mc.level.getBlockState(SUPPORT.above()).is(Blocks.DIRT))return;
                     onServer(p->{require(p.serverLevel().getBlockState(SUPPORT.above()).is(ModContent.BLACK_MIST.get()),"Placement did not make real black mist");
                         require(p.getInventory().getItem(1).getCount()==63,"Placement did not consume exactly one normal block");
-                        var pig=(LivingEntity)p.serverLevel().getEntity(pigId);pig.hurt(pig.damageSources().genericKill(),10000);});
+                        var pig=(LivingEntity)p.serverLevel().getEntity(pigId);pig.hurt(pig.damageSources().genericKill(),10000);dev.stillworld.server.PsycheManager.data(p).cooldownTicks=0;dev.stillworld.server.PsycheManager.sync(p);});
                     checks.add("Right click placed snapshot dirt, made real black mist, and consumed one item");aim(new Vec3(-.5,100.8,3.5));advance(Step.DEAD);
                 }
                 case DEAD -> {
@@ -337,6 +337,9 @@ public final class ClientVisualSmoke {
     }
 
     private void prepare(ServerPlayer player) {
+        // This fixture tests rendering/skills, while PsycheGameTests covers the resource gates.
+        player.setData(ModContent.PSYCHE,new dev.stillworld.server.PsycheData());
+        dev.stillworld.server.PsycheManager.applyHealth(player);
         var server=player.getServer();var level=player.serverLevel();
         require(server!=null && level==server.overworld(),"Smoke world must be in the overworld");
         level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false,server);level.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(true,server);

@@ -13,6 +13,7 @@
     {"name":"ScanRadius","type":"float","count":1,"values":[0]},
     {"name":"ScanRange","type":"float","count":1,"values":[256]},
     {"name":"Elapsed","type":"float","count":1,"values":[0]},
-    {"name":"DistortionStrength","type":"float","count":1,"values":[1]}
+    {"name":"DistortionStrength","type":"float","count":1,"values":[1]},
+    {"name":"Exhaustion","type":"float","count":1,"values":[0]}
   ]
 }

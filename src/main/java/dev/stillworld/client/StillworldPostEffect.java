@@ -57,6 +57,7 @@ public final class StillworldPostEffect {
         Vec3 offset=event.getCamera().getPosition().subtract(origin);
         var viewProjection=new Matrix4f(event.getProjectionMatrix()).mul(event.getModelViewMatrix());
         var inverse=viewProjection.invert(new Matrix4f());
+        PsycheView.update();
         for(var current:new PostChain[]{chain,spatialChain})for(var pass:((PostChainAccessor)(Object)current).stillworld$passes()) {
             var effect=pass.getEffect();
             effect.safeGetUniform("InverseViewProjection").set(inverse);
@@ -67,6 +68,8 @@ public final class StillworldPostEffect {
             effect.safeGetUniform("ScanRange").set(range);
             effect.safeGetUniform("Elapsed").set(elapsed);
             effect.safeGetUniform("DistortionStrength").set(mc.options.screenEffectScale().get().floatValue());
+            effect.safeGetUniform("FarEntry").set(PsycheView.farBlend());
+            effect.safeGetUniform("Exhaustion").set(PsycheView.exhaustion());
         }
         process(chain);
     }

@@ -26,6 +26,8 @@ public final class PhaseSession {
     public float miningProgress;
     private final SnapshotWorld snapshot;
     public boolean finishing;
+    public int psycheTicks, exhaustedTicks;
+    public boolean farZone;
     public PhaseSession(ServerPlayer player, Rank rank) {
         this.player = player; this.level = player.serverLevel(); this.rank = rank;
         entry = player.position(); entryTime = level.getGameTime(); snapshot = new SnapshotWorld(level);

@@ -24,5 +24,12 @@
   "message.stillworld.changed_block": "现实中的方块已改变，无法按旧快照破坏。",
   "message.stillworld.already_marked": "此生物正在被另一位玩家标记。",
   "message.stillworld.linked_target": "此目标需要关联状态回退，该部分将在后续版本实现。",
-  "message.stillworld.slash_limit": "本次寂界已留下 16 道斩击。"
+  "message.stillworld.slash_limit": "本次寂界已留下 16 道斩击。",
+  "block.stillworld.distortion_treatment_machine": "扭曲治疗机（预留）",
+  "hud.stillworld.psyche": "灵能：%s / 100",
+  "hud.stillworld.cooldown": "切换冷却：%s 秒",
+  "hud.stillworld.doom": "生命崩溃：%s 秒",
+  "message.stillworld.low_psyche": "灵能不足，需要 %s 点。",
+  "message.stillworld.switch_cooldown": "还需 %s 秒才能切换。",
+  "message.stillworld.forced_exit": "强行退出：失去 40% 生命上限，40 秒后死亡。"
 }

@@ -24,6 +24,13 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 public final class SessionGameTests {
     static ServerPlayer player(GameTestHelper h) {
         var p = new ServerPlayer(h.getLevel().getServer(), h.getLevel(), new GameProfile(UUID.randomUUID(), "still-test"), ClientInformation.createDefault());
+        // Ordinary server actions now send resource/cooldown messages. Exercise those paths
+        // with a real listener and a packet sink, without connecting a desktop client.
+        new net.minecraft.server.network.ServerGamePacketListenerImpl(h.getLevel().getServer(),
+                new net.minecraft.network.Connection(net.minecraft.network.protocol.PacketFlow.SERVERBOUND),p,
+                net.minecraft.server.network.CommonListenerCookie.createInitial(p.getGameProfile(),false)) {
+            @Override public void send(net.minecraft.network.protocol.Packet<?> packet,net.minecraft.network.PacketSendListener callback) { }
+        };
         p.setPos(Vec3.atBottomCenterOf(h.absolutePos(new BlockPos(3, 2, 3))));
         return p;
     }

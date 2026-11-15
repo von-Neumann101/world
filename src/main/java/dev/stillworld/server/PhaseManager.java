@@ -47,6 +47,9 @@ public final class PhaseManager {
         bus.addListener(PhaseManager::logout);
         bus.addListener(PhaseManager::login);
         bus.addListener(PhaseManager::dimension);
+        // NeoForge copies attachments at NORMAL priority. Finish the old player's
+        // session first so immediate respawn cannot retain it or copy a stale timer.
+        bus.addListener(net.neoforged.bus.api.EventPriority.HIGH,PhaseManager::clonePlayer);
         bus.addListener(PhaseManager::stop);
         bus.addListener(PhaseManager::damage);
         bus.addListener(PhaseManager::target);
@@ -54,6 +57,7 @@ public final class PhaseManager {
     public static boolean enter(ServerPlayer player) {
         var rank = ModContent.equippedRank(player);
         if (rank == null || get(player) != null || !player.isAlive() || player.isSpectator() || player.isPassenger() || player.isSleeping()) return false;
+        if (!PsycheManager.ready(player)) return false;
         var session = new PhaseSession(player, rank);
         for (var holder : ((ChunkMapAccessor)(Object) session.level.getChunkSource().chunkMap).stillworld$chunks()) {
             if (holder.getLatestChunk() instanceof LevelChunk chunk) session.snapshot().capture(chunk);
@@ -88,6 +92,7 @@ public final class PhaseManager {
         }
         session.actors.values().forEach(visual -> sendActor(session, visual));
         broadcast(player.getServer());
+        PsycheManager.switched(player);
         return true;
     }
     private static void sendActor(PhaseSession session, CompoundTag visual) {
@@ -113,7 +118,24 @@ public final class PhaseManager {
             }
             if (player.isAlive() && player.serverLevel() == session.level) safeExit(player, session);
             broadcast(player.getServer());
+            PsycheManager.switched(player);
         }
+    }
+    /** Ordinary key/command exit obeys the timer; lifecycle cleanup must always be possible. */
+    public static boolean requestExit(ServerPlayer player) {
+        if (get(player)==null || !PsycheManager.ready(player)) return false;
+        exitWithCost(player);return true;
+    }
+    public static void exitWithCost(ServerPlayer player) {
+        var session=get(player);if(session==null||session.finishing)return;
+        PsycheManager.payExit(session);exit(player);
+    }
+    public static boolean toggle(ServerPlayer player) {
+        if(get(player)!=null)return requestExit(player);
+        if(ModContent.equippedRank(player)==null) {
+            player.displayClientMessage(Component.translatable("message.stillworld.need_charm"),true);return false;
+        }
+        return enter(player);
     }
     private static void safeExit(ServerPlayer player, PhaseSession session) {
         // The session has already been removed, so this checks reality's collisions.
@@ -134,8 +156,7 @@ public final class PhaseManager {
     public static void handle(ServerPlayer player, CompoundTag data) {
         String op = data.getString("op");
         if (op.equals("toggle")) {
-            if (get(player) != null) exit(player);
-            else if (!enter(player)) player.displayClientMessage(Component.translatable("message.stillworld.need_charm"), true);
+            toggle(player);
             return;
         }
         var session = get(player);
@@ -184,15 +205,21 @@ public final class PhaseManager {
     }
     private static void playerTick(PlayerTickEvent.Post event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        PsycheManager.tick(player);
         var session = get(player); if (session == null) return;
-        if (!player.isAlive() || ModContent.equippedRank(player) != session.rank || player.serverLevel() != session.level) { exit(player); return; }
+        if (!player.isAlive() || ModContent.equippedRank(player) != session.rank || player.serverLevel() != session.level) { exitWithCost(player); return; }
         tickHandler.accept(session);
     }
-    private static void damage(LivingIncomingDamageEvent event) { if (isPhased(event.getEntity())) event.setCanceled(true); }
+    private static void damage(LivingIncomingDamageEvent event) { if (isPhased(event.getEntity()) && !event.getSource().is(net.minecraft.world.damagesource.DamageTypes.GENERIC_KILL)) event.setCanceled(true); }
     private static void target(LivingChangeTargetEvent event) { if (event.getNewAboutToBeSetTarget() != null && isPhased(event.getNewAboutToBeSetTarget())) event.setNewAboutToBeSetTarget(null); }
-    private static void logout(PlayerEvent.PlayerLoggedOutEvent event) { if (event.getEntity() instanceof ServerPlayer player) exit(player); }
+    private static void logout(PlayerEvent.PlayerLoggedOutEvent event) { if (event.getEntity() instanceof ServerPlayer player) exitWithCost(player); }
     private static void login(PlayerEvent.PlayerLoggedInEvent event) { if (event.getEntity() instanceof ServerPlayer player) broadcast(player.getServer()); }
-    private static void dimension(PlayerEvent.PlayerChangedDimensionEvent event) { if (event.getEntity() instanceof ServerPlayer player) exit(player); }
-    private static void stop(ServerStoppingEvent event) { for (var session : sessions()) exit(session.player); SESSIONS.clear(); }
+    private static void dimension(PlayerEvent.PlayerChangedDimensionEvent event) { if (event.getEntity() instanceof ServerPlayer player) exitWithCost(player); }
+    private static void clonePlayer(PlayerEvent.Clone event) {
+        if(event.getOriginal() instanceof ServerPlayer player) {
+            if(event.isWasDeath())exit(player);else exitWithCost(player);
+        }
+    }
+    private static void stop(ServerStoppingEvent event) { for (var session : sessions()) exitWithCost(session.player); SESSIONS.clear(); }
     private PhaseManager() { }
 }

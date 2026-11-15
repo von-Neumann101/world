@@ -7,6 +7,8 @@ uniform mat4 ViewProjection;
 uniform vec3 CameraFromOrigin;
 uniform float ScanProgress;
 uniform float DistortionStrength;
+uniform float FarEntry;
+uniform float Exhaustion;
 in vec2 texCoord;
 out vec4 fragColor;
 
@@ -59,12 +61,16 @@ void main() {
     // Bound in both UV and viewport-height units. A UV-only horizontal cap grows
     // with ultrawide windows and can fold the field around the fixed-size reticle.
     float extent = max(length(delta) / 0.075, length(delta * aspect) / 0.12);
-    delta /= max(1.0, extent);
+    // Strong exhaustion would magnify the hard limit's derivative kink. Ease
+    // into a smooth saturation only as that danger effect grows.
+    delta /= mix(max(1.0, extent), sqrt(1.0 + extent * extent), clamp(Exhaustion, 0.0, 1.0));
     // One tenth of the original field at 64 blocks from entry; logarithmic growth
     // before that radius and linear growth beyond it are evaluated by the coarse pass.
-    delta *= 0.10 * strengthAt(texCoord);
+    // Both danger signals ease in over time on the client. They affect the shared
+    // field, never individual object edges; ordinary radial growth is unchanged.
+    delta *= 0.10 * (strengthAt(texCoord) + 0.35 * FarEntry + 4.0 * Exhaustion);
     extent = max(length(delta) / 0.075, length(delta * aspect) / 0.12);
-    delta /= max(1.0, extent);
+    delta /= mix(max(1.0, extent), sqrt(1.0 + extent * extent), clamp(Exhaustion, 0.0, 1.0));
 
     // Broad, smooth protection at the frame and reticle, independent of object boundaries.
     // Keep the crosshair ray exact while allowing off-axis foreground to follow the space.

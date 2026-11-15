@@ -57,15 +57,16 @@ final class DistanceShaderProbe {
                 +"\ndark="+java.util.Arrays.toString(brightness[0])+"\nlight="+java.util.Arrays.toString(brightness[1])+"\nsky="+java.util.Arrays.toString(sky)+"\nrim="+rim+"\n");
         double nearContrast=brightness[1][0]-brightness[0][0];
         if(nearContrast<.30)throw new AssertionError("Near textures lost their light/shadow contrast");
-        for(int i=1;i<distances.length;i++) {
+        for(int i=1;i<3;i++) {
             double contrast=brightness[1][i]-brightness[0][i];
             double previous=brightness[1][i-1]-brightness[0][i-1];
-            if(brightness[0][i]<=brightness[0][i-1]+.01)throw new AssertionError("Distant shadows did not lift into silver-gray haze");
-            if(contrast>=previous-.01)throw new AssertionError("Atmospheric contrast did not decrease with distance");
-            if(contrast<nearContrast*.18)throw new AssertionError("Distant layers lost all light/shadow separation");
+            if(brightness[0][i]<=brightness[0][i-1]+.01||contrast>=previous-.01)
+                throw new AssertionError("Near-zone atmosphere lost its original depth layering");
         }
-        if(brightness[0][4]<.42||brightness[1][5]>.78)throw new AssertionError("Distant tones became oppressive black or featureless white");
-        if(brightness[1][4]-brightness[0][4]>nearContrast*.6)throw new AssertionError("Distant textures remained too high-contrast");
+        if(brightness[0][4]>=brightness[0][2]-.10||brightness[0][5]>=brightness[0][4])
+            throw new AssertionError("Far-zone shadows must deepen with entry distance");
+        if(brightness[1][5]<.5||brightness[1][5]>.78)
+            throw new AssertionError("Far-zone highlights must remain legible");
         if(sky[0]<.55||sky[1]>.88||sky[1]-sky[0]<.04)throw new AssertionError("Sky needs a pale atmosphere with visible cloud layering");
         if(Math.abs(sky[2]-sky[0])>.01)throw new AssertionError("Transparent lower sky became a black horizon in the final composite");
         if(rim<.06||rim>.24)throw new AssertionError("Structural rim must be present but secondary to the surface: "+rim);

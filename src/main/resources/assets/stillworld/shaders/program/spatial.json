@@ -11,6 +11,8 @@
     {"name":"ViewProjection","type":"matrix4x4","count":16,"values":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},
     {"name":"CameraFromOrigin","type":"float","count":3,"values":[0,0,0]},
     {"name":"ScanProgress","type":"float","count":1,"values":[0]},
-    {"name":"DistortionStrength","type":"float","count":1,"values":[1]}
+    {"name":"DistortionStrength","type":"float","count":1,"values":[1]},
+    {"name":"FarEntry","type":"float","count":1,"values":[0]},
+    {"name":"Exhaustion","type":"float","count":1,"values":[0]}
   ]
 }

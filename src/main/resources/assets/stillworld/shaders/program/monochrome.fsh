@@ -10,6 +10,7 @@ uniform float ScanRadius;
 uniform float ScanRange;
 uniform float Elapsed;
 uniform float DistortionStrength;
+uniform float Exhaustion;
 in vec2 texCoord;
 out vec4 fragColor;
 
@@ -72,9 +73,15 @@ void main() {
     // Contours briefly catch the entry wave, then settle back into the surface rather than dominating it.
     float rim = edge * (0.30 + front * 0.38);
     float linework = mix(mix(surface, 0.86, rim), atmosphere, haze);
+    // Past the entry-centered safe region, deepen shadows instead of dimming
+    // every tone. The linear ramp begins at zero, leaving sky and highlights open.
+    float farDark = sky ? 0.0 : clamp((distanceFromEntry - 64.0) / 160.0, 0.0, 1.0);
+    float shadow = pow(1.0 - clamp(luminance, 0.0, 1.0), 2.0);
+    linework = max(0.015, linework - 0.48 * farDark * shadow);
     vec3 result = mix(color.rgb, vec3(linework), coverage);
     // Narrow silver-white core and restrained halo follow world distance, not a screen-space circle.
     result = mix(result, vec3(0.9, 0.94, 0.98), front * 0.65);
+    if (sky) result *= 1.0 - clamp(Exhaustion, 0.0, 1.0);
     // This is the completed world image. Empty sky may have alpha zero in the source framebuffer;
     // carrying that alpha into the final blended blit would erase the atmosphere into a black horizon.
     fragColor = vec4(result, 1.0);

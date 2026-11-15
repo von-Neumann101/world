@@ -119,6 +119,7 @@ public final class StillworldClient {
         var mc = Minecraft.getInstance();
         if (!mc.isSameThread()) { mc.execute(() -> receive(tag)); return; }
         switch (tag.getString("op")) {
+            case "psyche" -> PsycheView.receive(tag);
             case "phased" -> {
                 PHASED.clear();
                 var list = tag.getList("players", Tag.TAG_STRING);
@@ -265,9 +266,11 @@ public final class StillworldClient {
     }
 
     private static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
+        PsycheView.reset();
         clearSession(); LOCKED.clear(); PHASED.clear(); knownLevel = null;
     }
     private static void clearSession() {
+        PsycheView.clearSession();
         session = null; rank = null; GHOSTS.clear(); ENTRY_ANIMATIONS.clear(); DEAD.clear(); SLASHES.clear(); PLACED.clear();
         breaking = null; breakingTicks = 0; attackDelay = useDelay = 0;
         RealityOrbRenderer.clear();
@@ -287,6 +290,7 @@ public final class StillworldClient {
     }
 
     private static void tick(ClientTickEvent.Post event) {
+        PsycheView.tick();
         var mc = Minecraft.getInstance();
         if (knownLevel != mc.level) {
             if (knownLevel != null) { clearSession(); LOCKED.clear(); }
@@ -402,6 +406,7 @@ public final class StillworldClient {
     }
 
     private static void hud(RenderGuiEvent.Post event) {
+        PsycheView.hud(event);
         var mc = Minecraft.getInstance();
         if (mc.player == null || mc.options.hideGui) return;
         var equipped = active() ? rank : ModContent.equippedRank(mc.player);
