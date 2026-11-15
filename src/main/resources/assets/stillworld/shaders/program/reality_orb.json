@@ -15,6 +15,10 @@
     {"name":"AnimationTime","type":"float","count":1,"values":[0]},
     {"name":"HudMode","type":"float","count":1,"values":[0]},
     {"name":"HudCenter","type":"float","count":2,"values":[0,0]},
-    {"name":"HudRadius","type":"float","count":1,"values":[0]}
+    {"name":"HudRadius","type":"float","count":1,"values":[0]},
+    {"name":"HudOpacity","type":"float","count":1,"values":[1]},
+    {"name":"HudFar","type":"float","count":1,"values":[0]},
+    {"name":"HudWaveTime","type":"float","count":1,"values":[0]},
+    {"name":"ExitProgress","type":"float","count":1,"values":[0]}
   ]
 }

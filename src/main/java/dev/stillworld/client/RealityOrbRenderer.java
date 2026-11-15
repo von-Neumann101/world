@@ -60,7 +60,7 @@ public final class RealityOrbRenderer {
         // avoids covering the whole view when entering or walking through the anchor.
         // Include the shader's maximum moving boundary in both visibility checks.
         boolean sphereVisible=distance>BOUNDARY_RADIUS&&event.getFrustum().isVisible(new AABB(center,center).inflate(BOUNDARY_RADIUS));
-        boolean hudVisible=PsycheView.windowRadius()>0;
+        boolean hudVisible=PsycheView.windowRadius()>0&&PsycheView.windowOpacity()>0;
         if(!sphereVisible&&!hudVisible)return;
         float opacity=(float)Math.clamp((distance-BOUNDARY_RADIUS)/.45,0,1);
         var main=mc.getMainRenderTarget();
@@ -100,7 +100,7 @@ public final class RealityOrbRenderer {
     /** Screen-space composition follows world refraction; the HUD never bends or gets terrain-occluded. */
     static void renderHud() {
         float radius=PsycheView.windowRadius();
-        if(!hudReady||failed||compositor==null||radius<=0)return;
+        if(!hudReady||failed||compositor==null||radius<=0||PsycheView.windowOpacity()<=0)return;
         var mc=Minecraft.getInstance();var main=mc.getMainRenderTarget();
         try {
             float scale=(float)mc.getWindow().getGuiScale();
@@ -108,6 +108,9 @@ public final class RealityOrbRenderer {
             effect.safeGetUniform("HudMode").set(1f);
             effect.safeGetUniform("HudCenter").set(PsycheView.WINDOW_X*scale,main.height-PsycheView.WINDOW_Y*scale);
             effect.safeGetUniform("HudRadius").set(radius*scale);
+            effect.safeGetUniform("HudOpacity").set(PsycheView.windowOpacity());
+            effect.safeGetUniform("HudFar").set(PsycheView.farBlend());
+            effect.safeGetUniform("HudWaveTime").set(PsycheView.windowWaveTime());
             effect.safeGetUniform("AnimationTime").set((System.nanoTime()-animationStart)/1_000_000_000f);
             RenderSystem.disableBlend();RenderSystem.disableDepthTest();RenderSystem.resetTextureMatrix();
             compositor.process(0);

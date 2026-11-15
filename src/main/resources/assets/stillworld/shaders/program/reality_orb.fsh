@@ -13,6 +13,10 @@ uniform vec2 InSize;
 uniform float HudMode;
 uniform vec2 HudCenter;
 uniform float HudRadius;
+uniform float HudOpacity;
+uniform float HudFar;
+uniform float HudWaveTime;
+uniform float ExitProgress;
 
 in vec2 texCoord;
 out vec4 fragColor;
@@ -22,25 +26,25 @@ vec3 relativePosition(vec2 uv, float depth) {
     return point.xyz / point.w;
 }
 
-float boundaryWave(vec3 direction) {
+float boundaryWave(vec3 direction, float time) {
     // World-oriented, smooth waves with different speeds: local lobes flow around
     // the opening rather than the whole silhouette breathing as one perfect circle.
-    return 0.070 * sin(dot(direction, vec3(3.7, 1.3, 2.1)) + AnimationTime * 0.85)
-         + 0.040 * sin(dot(direction, vec3(-1.7, 4.9, 2.8)) - AnimationTime * 1.10)
-         + 0.018 * sin(dot(direction, vec3(6.2, -3.4, 4.6)) + AnimationTime * 1.45);
+    return 0.070 * sin(dot(direction, vec3(3.7, 1.3, 2.1)) + time * 0.85)
+         + 0.040 * sin(dot(direction, vec3(-1.7, 4.9, 2.8)) - time * 1.10)
+         + 0.018 * sin(dot(direction, vec3(6.2, -3.4, 4.6)) + time * 1.45);
 }
 
-vec4 orbSurface(vec3 frozen, float radial, float pixelWidth, vec2 centerUv, float opacity) {
+vec4 orbSurface(vec3 frozen, float radial, float pixelWidth, vec2 centerUv, float opacity, float treatment) {
     float edgeCurve = smoothstep(0.55, 0.93, radial);
     edgeCurve *= edgeCurve * (1.0 - smoothstep(0.94, 1.0, radial));
-    vec2 liveUv = texCoord + (texCoord - centerUv) * (0.055 * edgeCurve);
+    vec2 liveUv = texCoord + (texCoord - centerUv) * (0.055 * edgeCurve * treatment);
     vec2 halfPixel = 0.5 / max(InSize, vec2(1.0));
     vec3 live = texture(RealitySampler, clamp(liveUv, halfPixel, 1.0 - halfPixel)).rgb;
     float grazing = smoothstep(0.68, 0.98, radial);
-    vec3 surface = live * (1.0 - 0.92 * pow(grazing, 1.35));
+    vec3 surface = live * (1.0 - 0.92 * pow(grazing, 1.35) * treatment);
     float ringWidth = max(0.004, pixelWidth * 0.35);
     float ringCoordinate = (radial - 0.978) / ringWidth;
-    float ring = exp(-ringCoordinate * ringCoordinate) * 0.58;
+    float ring = exp(-ringCoordinate * ringCoordinate) * 0.58 * treatment;
     surface = mix(surface, vec3(0.70, 0.74, 0.78), ring);
     float coverage = 1.0 - smoothstep(1.0 - pixelWidth * 0.7, 1.0, radial);
     return vec4(mix(frozen, surface, coverage * clamp(opacity, 0.0, 1.0)), 1.0);
@@ -50,15 +54,21 @@ void main() {
     vec3 frozen = texture(DiffuseSampler, texCoord).rgb;
     fragColor = vec4(frozen, 1.0);
     if (HudMode > 0.5) {
-        if (HudRadius <= 0.0) return;
+        if (HudMode > 1.5 && ExitProgress >= 1.0) {
+            fragColor = vec4(texture(RealitySampler, texCoord).rgb, 1.0);
+            return;
+        }
+        if (HudRadius <= 0.0 || HudOpacity <= 0.0) return;
         vec2 delta = texCoord * InSize - HudCenter;
         float distance = length(delta);
         float baseRadial = distance / HudRadius;
-        if (baseRadial > 1.15) return;
+        if (baseRadial > 1.20) return;
         vec3 direction = vec3(delta / max(distance, 0.00001), 0.0);
-        float radius = HudRadius * (1.0 + boundaryWave(direction) * smoothstep(0.35, 0.75, baseRadial));
+        float wave = boundaryWave(direction, HudWaveTime) * mix(0.5, 1.4, clamp(HudFar, 0.0, 1.0));
+        float radius = HudRadius * (1.0 + wave * smoothstep(0.35, 0.75, baseRadial));
         float radial = distance / radius;
-        fragColor = orbSurface(frozen, radial, max(fwidth(radial), 0.00001), HudCenter / InSize, 1.0);
+        float treatment = HudMode > 1.5 ? 1.0 - clamp(ExitProgress, 0.0, 1.0) : 1.0;
+        fragColor = orbSurface(frozen, radial, max(fwidth(radial), 0.00001), HudCenter / InSize, HudOpacity, treatment);
         return;
     }
     if (Opacity <= 0.0 || SphereRadius <= 0.0) return;
@@ -83,7 +93,7 @@ void main() {
     vec3 direction = closest / max(closestLength, 0.00001);
     // A directional effective radius keeps the existing analytic depth test cheap.
     // Only the perimeter deforms; the central live image and front depth stay steady.
-    float radius = SphereRadius * (1.0 + boundaryWave(direction) * smoothstep(0.35, 0.75, baseRadial));
+    float radius = SphereRadius * (1.0 + boundaryWave(direction, AnimationTime) * smoothstep(0.35, 0.75, baseRadial));
     float c = dot(offset, offset) - radius * radius;
     float discriminant = b * b - c;
     float radial = closestLength / radius;
@@ -107,5 +117,5 @@ void main() {
     if (projectedCenter.w > 0.0001) {
         centerUv = projectedCenter.xy / projectedCenter.w * 0.5 + 0.5;
     }
-    fragColor = orbSurface(frozen, radial, pixelWidth, centerUv, Opacity);
+    fragColor = orbSurface(frozen, radial, pixelWidth, centerUv, Opacity, 1.0);
 }

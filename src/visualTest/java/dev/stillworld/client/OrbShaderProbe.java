@@ -169,6 +169,9 @@ public final class OrbShaderProbe {
         return render(base,live,depths,matrix,center,radius,opacity,time,false,0);
     }
     private float[] render(float[] base, float[] live, float[] depths, Matrix4f matrix, Vector3f center, float radius, float opacity,float time,boolean hud,float hudRadius) {
+        return render(base,live,depths,matrix,center,radius,opacity,time,hud?1:0,hudRadius,1,0,0);
+    }
+    private float[] render(float[] base, float[] live, float[] depths, Matrix4f matrix, Vector3f center, float radius, float opacity,float time,int hudMode,float hudRadius,float hudOpacity,float far,float exit) {
         upload(frozen, GL_RGBA, base);
         upload(reality, GL_RGBA, live);
         upload(depth, GL_RED, depths);
@@ -187,9 +190,13 @@ public final class OrbShaderProbe {
         glUniform1f(glGetUniformLocation(program, "SphereRadius"), radius);
         glUniform1f(glGetUniformLocation(program, "Opacity"), opacity);
         glUniform1f(glGetUniformLocation(program, "AnimationTime"), time);
-        glUniform1f(glGetUniformLocation(program, "HudMode"), hud?1:0);
+        glUniform1f(glGetUniformLocation(program, "HudMode"), hudMode);
         glUniform2f(glGetUniformLocation(program, "HudCenter"), 41,height-77);
         glUniform1f(glGetUniformLocation(program, "HudRadius"), hudRadius);
+        glUniform1f(glGetUniformLocation(program, "HudOpacity"), hudOpacity);
+        glUniform1f(glGetUniformLocation(program, "HudFar"), far);
+        glUniform1f(glGetUniformLocation(program, "HudWaveTime"), time*.4f);
+        glUniform1f(glGetUniformLocation(program, "ExitProgress"), exit);
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
         glViewport(0, 0, width, height);
         glDisable(GL_DEPTH_TEST);
@@ -226,6 +233,38 @@ public final class OrbShaderProbe {
         float[] moving=render(base,live,depths,view,center,0,0,.8f,true,28);
         check(maxDifference(full,moving)>.01,"HUD boundary moves independently of frozen world time");
         write(output.resolve("hud-full.png"),full);write(output.resolve("hud-quarter.png"),quarter);write(output.resolve("hud-empty.png"),empty);
+        float[] absent=render(base,live,depths,view,center,0,0,0,1,28,0,0,0);
+        float[] half=render(base,live,depths,view,center,0,0,0,1,28,.5f,0,0);
+        check(maxDifference(base,absent)<.00001,"entry holds the HUD invisible until its delayed fade starts");
+        check(blendError(base,full,half)<.00001,"HUD fade is continuous over the existing scene");
+        float[] quiet=render(base,live,depths,view,center,0,0,0,1,28,1,0,0);
+        float[] strong=render(base,live,depths,view,center,0,0,0,1,28,1,1,0);
+        check(hudOutlineRange(base,strong)>hudOutlineRange(base,quiet)*1.7,"linear-zone HUD has a larger boundary amplitude");
+        float[] opening=render(base,live,depths,view,center,0,0,0,2,28,1,0,0);
+        float[] spreading=render(base,live,depths,view,center,0,0,0,2,width*.45f,1,0,.5f);
+        float[] restored=render(base,live,depths,view,center,0,0,0,2,width*2f,1,0,1);
+        check(maxDifference(full,opening)<.00001,"exit begins at the same HUD boundary without replacing the entire screen");
+        check(rectDifference(live,spreading,35,height-83,47,height-71)<.00001
+                &&rectDifference(base,spreading,width-24,0,width,24)<.00001,"exit reveals reality near the upper-left opening before the far corner");
+        check(maxDifference(live,restored)<.00001,"exit completes with unfiltered reality and no residual dark rim");
+        float[] zeroStart=render(base,live,depths,view,center,0,0,0,2,0,1,1,0);
+        float[] zeroSpreading=render(base,live,depths,view,center,0,0,0,2,width*.4f,1,1,.4f);
+        check(maxDifference(base,zeroStart)<.00001&&rectDifference(live,zeroSpreading,35,height-83,47,height-71)<.00001,
+                "zero-energy exit starts from a point and still reveals reality outward");
+        write(output.resolve("hud-far.png"),strong);write(output.resolve("exit-mid.png"),spreading);write(output.resolve("exit-done.png"),restored);
+    }
+
+    private static double hudOutlineRange(float[] base,float[] pixels) {
+        double min=Double.POSITIVE_INFINITY,max=0;
+        for(int a=0;a<96;a++) {
+            double angle=a*Math.PI*2/96,edge=0;
+            for(double r=18;r<35;r+=.2) {
+                int x=(int)(41+Math.cos(angle)*r),y=(int)(height-77+Math.sin(angle)*r),i=(y*width+x)*4;
+                if(Math.abs(base[i]-pixels[i])+Math.abs(base[i+1]-pixels[i+1])+Math.abs(base[i+2]-pixels[i+2])>.03)edge=r;
+            }
+            min=Math.min(min,edge);max=Math.max(max,edge);
+        }
+        return max-min;
     }
 
     private static Matrix4f projection(float yaw, float pitch) {

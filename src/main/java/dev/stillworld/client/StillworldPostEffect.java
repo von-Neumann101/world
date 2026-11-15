@@ -21,9 +21,13 @@ public final class StillworldPostEffect {
     private static int width, height;
     private static boolean failed;
     private static float progress;
+    private static float farStyle,exhaustionStyle;
 
     static void registerReloads(RegisterClientReloadListenersEvent event) {
-        event.registerReloadListener((ResourceManagerReloadListener) resources -> release());
+        event.registerReloadListener((ResourceManagerReloadListener) resources -> {
+            if(StillworldExitEffect.active())StillworldRendering.clear();
+            StillworldExitEffect.clear();release();
+        });
     }
 
     static void begin(Vec3 position) { clear(); origin=position; }
@@ -31,6 +35,12 @@ public final class StillworldPostEffect {
     public static boolean settled() { return loaded() && progress>=1; }
 
     static void render(RenderLevelStageEvent event) {
+        render(event,false);
+    }
+    static void renderExit(RenderLevelStageEvent event) {
+        render(event,true);
+    }
+    private static void render(RenderLevelStageEvent event,boolean exiting) {
         var mc=Minecraft.getInstance();
         var target=mc.getMainRenderTarget();
         if(failed)return;
@@ -52,12 +62,12 @@ public final class StillworldPostEffect {
         long now=System.nanoTime();
         if(started==0)started=now;
         float elapsed=(now-started)/1_000_000_000f;
-        progress=Math.min(1,elapsed/2.4f);
+        if(!exiting)progress=Math.min(1,elapsed/2.4f);
         float range=Math.max(64,mc.options.getEffectiveRenderDistance()*24f);
         Vec3 offset=event.getCamera().getPosition().subtract(origin);
         var viewProjection=new Matrix4f(event.getProjectionMatrix()).mul(event.getModelViewMatrix());
         var inverse=viewProjection.invert(new Matrix4f());
-        PsycheView.update();
+        if(!exiting){PsycheView.update();farStyle=PsycheView.farBlend();exhaustionStyle=PsycheView.exhaustion();}
         for(var current:new PostChain[]{chain,spatialChain})for(var pass:((PostChainAccessor)(Object)current).stillworld$passes()) {
             var effect=pass.getEffect();
             effect.safeGetUniform("InverseViewProjection").set(inverse);
@@ -68,8 +78,8 @@ public final class StillworldPostEffect {
             effect.safeGetUniform("ScanRange").set(range);
             effect.safeGetUniform("Elapsed").set(elapsed);
             effect.safeGetUniform("DistortionStrength").set(mc.options.screenEffectScale().get().floatValue());
-            effect.safeGetUniform("FarEntry").set(PsycheView.farBlend());
-            effect.safeGetUniform("Exhaustion").set(PsycheView.exhaustion());
+            effect.safeGetUniform("FarEntry").set(farStyle);
+            effect.safeGetUniform("Exhaustion").set(exhaustionStyle);
         }
         process(chain);
     }
@@ -88,6 +98,6 @@ public final class StillworldPostEffect {
         if(spatialChain!=null){spatialChain.close();spatialChain=null;}
         width=height=0;failed=false;
     }
-    static void clear() { release();started=0;progress=0;origin=Vec3.ZERO; }
+    static void clear() { release();started=0;progress=farStyle=exhaustionStyle=0;origin=Vec3.ZERO; }
     private StillworldPostEffect() { }
 }

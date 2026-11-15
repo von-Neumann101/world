@@ -15,7 +15,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.AnimationState;
 import net.minecraft.world.entity.Entity;
@@ -40,7 +39,6 @@ import net.minecraft.client.renderer.RenderType;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
-import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import org.lwjgl.glfw.GLFW;
@@ -79,7 +77,6 @@ public final class StillworldClient {
         modBus.addListener(RealityOrbRenderer::registerReloads);
         NeoForge.EVENT_BUS.addListener(StillworldClient::tick);
         NeoForge.EVENT_BUS.addListener(StillworldClient::interaction);
-        NeoForge.EVENT_BUS.addListener(StillworldClient::hud);
         NeoForge.EVENT_BUS.addListener(StillworldRendering::render);
         NeoForge.EVENT_BUS.addListener(StillworldClient::logout);
         PhaseNetwork.clientHandler = StillworldClient::receive;
@@ -164,7 +161,7 @@ public final class StillworldClient {
                 RealityWorld.begin(session,mc.level);
                 RealityOrbRenderer.begin(entry);
             }
-            case "end" -> clearSession();
+            case "end" -> clearSession(StillworldExitEffect.begin());
             default -> {
                 if (!active() || !tag.hasUUID("session") || !session.equals(tag.getUUID("session"))) return;
                 switch (tag.getString("op")) {
@@ -288,6 +285,9 @@ public final class StillworldClient {
         clearSession(); LOCKED.clear(); PHASED.clear(); knownLevel = null;
     }
     private static void clearSession() {
+        clearSession(false);
+    }
+    private static void clearSession(boolean keepExitEffect) {
         PsycheView.clearSession();
         session = null; rank = null; GHOSTS.clear(); ENTRY_ANIMATIONS.clear(); DEAD.clear(); SLASHES.clear(); PLACED.clear();
         breaking = null; breakingTicks = 0; attackDelay = useDelay = 0;
@@ -295,7 +295,7 @@ public final class StillworldClient {
         RealityWorld.clear();
         StillworldRendering.clear();
         FrozenBlockEntities.clear();
-        StillworldPostEffect.clear();
+        if(!keepExitEffect){StillworldExitEffect.clear();StillworldPostEffect.clear();}
     }
 
     private static CompoundTag action(String op) {
@@ -308,7 +308,6 @@ public final class StillworldClient {
     }
 
     private static void tick(ClientTickEvent.Post event) {
-        PsycheView.tick();
         var mc = Minecraft.getInstance();
         if (knownLevel != mc.level) {
             if (knownLevel != null) { clearSession(); LOCKED.clear(); }
@@ -424,22 +423,4 @@ public final class StillworldClient {
         PhaseNetwork.sendAction(tag); mc.player.swing(hand); useDelay = 4;
     }
 
-    private static void hud(RenderGuiEvent.Post event) {
-        PsycheView.hud(event);
-        var mc = Minecraft.getInstance();
-        if (mc.player == null || mc.options.hideGui) return;
-        var equipped = active() ? rank : ModContent.equippedRank(mc.player);
-        if (equipped == null) return;
-        var gui = event.getGuiGraphics();
-        gui.drawString(mc.font, Component.translatableWithFallback(active() ? "hud.stillworld.inside" : "hud.stillworld.outside",
-                active() ? "Stillworld · Rank %s" : "Reality · Rank %s", equipped.label()), 8, 8, 0xFFFFFFFF);
-        if (!active()) {
-            gui.drawString(mc.font, Component.translatableWithFallback("hud.stillworld.enter", "%s to enter", TOGGLE.getTranslatedKeyMessage()), 8, 20, 0xFFDDDDDD);
-            return;
-        }
-        gui.drawString(mc.font, Component.translatableWithFallback("hud.stillworld.status", "%s to leave", TOGGLE.getTranslatedKeyMessage()), 8, 20, 0xFFDDDDDD);
-        if (rank.canSlash()) {
-            gui.drawString(mc.font, Component.translatableWithFallback("hud.stillworld.slashes", "Slashes: %s", SLASHES.size()), 8, 32, 0xFFDDDDDD);
-        }
-    }
 }

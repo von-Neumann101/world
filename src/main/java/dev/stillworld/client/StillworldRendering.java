@@ -61,17 +61,18 @@ public final class StillworldRendering {
             }
             return;
         }
-        if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_PARTICLES && StillworldClient.active() && Minecraft.useShaderTransparency()) {
+        if(event.getStage()==RenderLevelStageEvent.Stage.AFTER_PARTICLES && (StillworldClient.active()||StillworldExitEffect.active()) && Minecraft.useShaderTransparency()) {
             // Fabulous clears main depth when compositing its separate translucent targets.
             // Preserve the opaque world before that composite, while leaving its active target intact.
             captureDepth();
             return;
         }
-        if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_LEVEL && StillworldClient.active()) {
+        if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_LEVEL && (StillworldClient.active()||StillworldExitEffect.active())) {
             if(!Minecraft.useShaderTransparency())captureDepth();
             if(savedDepth==null)return;
             var main = Minecraft.getInstance().getMainRenderTarget();
             main.copyDepthFrom(savedDepth); main.bindWrite(false);
+            if(!StillworldClient.active()){StillworldExitEffect.render(event,savedDepth);return;}
             worldProjection = new Matrix4f(event.getProjectionMatrix());
             worldView = new Matrix4f(event.getModelViewMatrix());
             worldCamera = event.getCamera().getPosition();
