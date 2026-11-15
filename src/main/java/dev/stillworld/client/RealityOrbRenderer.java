@@ -23,6 +23,8 @@ import org.joml.Matrix4f;
 
 /** One non-recursive, visual-only live view, composited through the entry sphere. */
 public final class RealityOrbRenderer {
+    private static final float RADIUS=1.2f;
+    private static final double BOUNDARY_RADIUS=RADIUS*1.15;
     private static Vec3 center;
     private static RenderTarget reality, sceneDepth;
     private static PostChain compositor;
@@ -37,7 +39,7 @@ public final class RealityOrbRenderer {
     static int renderedFrames(){return renderedFrames;}
     static RenderTarget scene(){return reality;}
     static void begin(Vec3 entry){
-        clear();center=entry.add(0,1,0);animationStart=System.nanoTime();
+        clear();center=entry.add(0,RADIUS,0);animationStart=System.nanoTime();
         // Match the view area just built by RealityWorld.begin, even before first visibility.
         var options=Minecraft.getInstance().options;
         graphics=options.graphicsMode().get();viewDistance=options.getEffectiveRenderDistance();
@@ -56,8 +58,8 @@ public final class RealityOrbRenderer {
         // Inside the shell there is no outward-facing surface to display. A wide fade
         // avoids covering the whole view when entering or walking through the anchor.
         // Include the shader's maximum moving boundary in both visibility checks.
-        if(distance<=1.15||!event.getFrustum().isVisible(new AABB(center,center).inflate(1.15)))return;
-        float opacity=(float)Math.clamp((distance-1.15)/.45,0,1);
+        if(distance<=BOUNDARY_RADIUS||!event.getFrustum().isVisible(new AABB(center,center).inflate(BOUNDARY_RADIUS)))return;
+        float opacity=(float)Math.clamp((distance-BOUNDARY_RADIUS)/.45,0,1);
         var main=mc.getMainRenderTarget();
         boolean depthSaved=false;
         try {
@@ -72,7 +74,7 @@ public final class RealityOrbRenderer {
             effect.safeGetUniform("InverseViewProjection").set(vp.invert(new Matrix4f()));
             effect.safeGetUniform("ViewProjection").set(vp);
             effect.safeGetUniform("SphereCenter").set((float)relative.x,(float)relative.y,(float)relative.z);
-            effect.safeGetUniform("SphereRadius").set(1f);
+            effect.safeGetUniform("SphereRadius").set(RADIUS);
             effect.safeGetUniform("Opacity").set(opacity);
             // World time is frozen in Stillworld, so animate from the session's real clock.
             effect.safeGetUniform("AnimationTime").set((System.nanoTime()-animationStart)/1_000_000_000f);

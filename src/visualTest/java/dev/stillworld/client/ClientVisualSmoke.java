@@ -449,6 +449,9 @@ public final class ClientVisualSmoke {
         var server=player.getServer();var level=player.serverLevel();
         require(server!=null && level==server.overworld(),"Smoke world must be in the overworld");
         level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false,server);level.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(true,server);
+        // The mined dirt can be picked up after exit and invalidate the fixed
+        // placement-count check. Keep drops out of this rendering/input fixture.
+        level.getGameRules().getRule(GameRules.RULE_DOBLOCKDROPS).set(false,server);
         level.getGameRules().getRule(GameRules.RULE_WEATHER_CYCLE).set(false,server);level.setDayTime(6000);level.setWeatherParameters(100000,0,false,false);
         for(var entity:level.getEntities((Entity)null,new AABB(-16,98,-16,16,110,16)))if(!(entity instanceof net.minecraft.world.entity.player.Player))entity.discard();
         for(int x=-12;x<=12;x++)for(int z=-8;z<=14;z++){
@@ -549,7 +552,7 @@ public final class ClientVisualSmoke {
     }
 
     private void checkOrb(String name) throws Exception {
-        require(RealityOrbRenderer.center()!=null && RealityOrbRenderer.center().distanceTo(ENTRY.add(0,1,0))<.001,"Orb moved away from the entry point");
+        require(RealityOrbRenderer.center()!=null && RealityOrbRenderer.center().distanceTo(ENTRY.add(0,1.2,0))<.001,"Orb moved away from its raised entry anchor");
         require(RealityOrbRenderer.renderedFrames()>5,"Live orb did not render multiple frames");
         require(!RealityWorld.isMirror(Minecraft.getInstance().level) && !RealityOrbRenderer.rendering(),"Live render context escaped into gameplay");
         try(var image=Screenshot.takeScreenshot(Minecraft.getInstance().getMainRenderTarget())) {
