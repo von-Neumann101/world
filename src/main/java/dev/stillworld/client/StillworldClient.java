@@ -22,6 +22,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.level.ClipContext;
@@ -205,7 +206,18 @@ public final class StillworldClient {
             entity = new RemotePlayer(level, new GameProfile(visual.getUUID("uuid"), visual.getString("name")));
             entity.load(visual.getCompound("entity"));
         } else {
-            entity = EntityType.loadEntityRecursive(visual.getCompound("entity"), level, e -> e);
+            var saved = visual.getCompound("entity");
+            var source = ENTRY_ANIMATIONS.get(visual.getUUID("uuid"));
+            if (source == null) source = level.getEntity(visual.getInt("entityId"));
+            if (source instanceof ItemEntity item && item.getType() == EntityType.ITEM
+                    && item.getUUID().equals(visual.getUUID("uuid")) && saved.getString("id").equals("minecraft:item")) {
+                // Vanilla's copy preserves the final, client-random bobOffs used for both spin and bob.
+                // Prefer the entry copy: the live item may have moved or disappeared before this payload.
+                entity = item.copy();
+                entity.load(saved);
+            } else {
+                entity = EntityType.loadEntityRecursive(saved, level, e -> e);
+            }
         }
         if (entity == null) return null;
         entity.setUUID(visual.getUUID("uuid"));

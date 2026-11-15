@@ -73,6 +73,7 @@ public final class ClientVisualSmoke {
     private volatile boolean serverDone;
     private volatile Throwable serverFailure;
     private UUID cowId, pigId, skeletonId, lateSpawnId;
+    private DroppedItemPoseChecks itemPoseChecks;
     private int lateProjectionFrames,lateRealityFrames;
     private int markedProjectionFrames;
     private CompoundTag frozenModel;
@@ -135,6 +136,7 @@ public final class ClientVisualSmoke {
                     require(live(cowId)!=null,"Prepared cow did not reach the real client entity list");
                     require(mc.player.getInventory().selected==0 && mc.player.getMainHandItem().is(ModContent.BLADE.get()),"Prepared sword slot was not synchronized to the actual client");
                     shot("01-reality-color.png"); seedBlockEntityAnimations();
+                    itemPoseChecks.arm();
                     mc.player.elytraRotX=.41f;mc.player.elytraRotY=.22f;mc.player.elytraRotZ=-.63f;mc.player.swingingArm=InteractionHand.OFF_HAND;
                     click("key.stillworld.toggle"); advance(Step.ENTER);
                 }
@@ -143,6 +145,7 @@ public final class ClientVisualSmoke {
                     if(StillworldClient.active() && (age==4||age==9||age==16||age==28))shot("scan-"+age+".png");
                     if(!StillworldClient.active()||ghost==null||age<65)return;
                     require(StillworldPostEffect.settled(),"World linework shader did not finish its entry wave");
+                    itemPoseChecks.check();
                     checkRadialField();
                     DistanceShaderProbe.check(output);
                     checks.add("Actual shader retained near atmosphere, deepened distant shadows and preserved pale sky layering");
@@ -188,6 +191,8 @@ public final class ClientVisualSmoke {
                     checkRealityPackets();
                     MirrorCacheChecks.check();
                     EntityVisibilityChecks.check(cowId);
+                    itemPoseChecks.check();
+                    checks.add("Flat and block drops retained entry direction/bob and remained frozen while their real entities kept animating");
                     checks.add("Snapshot visibility follows entity distance/settings, server tracking range and compiled terrain; approaching reveals it normally");
                     checks.add("Mirror cache rejected distant chunks/light and preserved visible terrain across view-distance changes");
                     checks.add("Live orb world updated its block/time/creature while the gameplay snapshot stayed frozen");
@@ -487,6 +492,7 @@ public final class ClientVisualSmoke {
         skeleton.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,new ItemStack(Items.BOW));
         skeleton.setItemSlot(net.minecraft.world.entity.EquipmentSlot.OFFHAND,new ItemStack(Items.TORCH));
         level.addFreshEntity(skeleton);skeletonId=skeleton.getUUID();
+        itemPoseChecks=DroppedItemPoseChecks.spawn(level);
     }
     private void livingRendered(RenderLivingEvent.Pre<?,?> event) {
         var entity=event.getEntity();
