@@ -133,9 +133,9 @@ public final class StillworldRendering {
                 for(int kind=1;kind<=2;kind++) {
                     if(kind==omitted)continue;
                     long noise=flickerBits(pattern+kind*0x9E3779B97F4A7C15L);
-                    double lateral=(.18+.20*(noise&255)/255.0)*side*(kind==1?-1:1);
-                    var offset=right.scale(lateral).add(forward.scale(.20*((noise>>>16)&255)/255.0-.10))
-                            .add(0,.14*((noise>>>8)&255)/255.0-.07,0);
+                    double lateral=(.09+.10*(noise&255)/255.0)*side*(kind==1?-1:1);
+                    var offset=right.scale(lateral).add(forward.scale(.10*((noise>>>16)&255)/255.0-.05))
+                            .add(0,.07*((noise>>>8)&255)/255.0-.035,0);
                     double alpha=.10+.10*((noise>>>24)&255)/255.0;
                     drawAfterimage(player,partial,camera,pose,buffers,offset,withAlpha(kind==1?0x101010:0xFFFFFF,alpha),true);
                 }

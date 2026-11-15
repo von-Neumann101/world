@@ -359,8 +359,8 @@ public final class MultiplayerVisualSmoke {
         try {
             if(stage.equals("WEARER_SAMPLE")||stage.equals("INSIDE_SAMPLE")) {
                 require(frameVisuals==2,"Expected exactly two simultaneous afterimage bodies, got "+frameVisuals);
-                require(frameMaxX-frameMinX>.12,"Afterimage bodies overlap without any visible lateral separation");
-                if(Float.isFinite(previousMinX)&&Math.max(Math.abs(frameMinX-previousMinX),Math.abs(frameMaxX-previousMaxX))>.075)positionJumps++;
+                require(frameMaxX-frameMinX>.06,"Afterimage bodies overlap without any visible lateral separation");
+                if(Float.isFinite(previousMinX)&&Math.max(Math.abs(frameMinX-previousMinX),Math.abs(frameMaxX-previousMaxX))>.0375)positionJumps++;
                 previousMinX=frameMinX;previousMaxX=frameMaxX;
             }
             int slot=Math.min(2,age/12);
