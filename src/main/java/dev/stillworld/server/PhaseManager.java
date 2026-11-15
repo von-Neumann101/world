@@ -108,6 +108,8 @@ public final class PhaseManager {
             SESSIONS.remove(player.getUUID());
             PhaseNetwork.sendState(player, PhaseNetwork.message("end"));
             if (player.connection != null) {
+                // Also reconcile predictions that were already stale before this exit.
+                player.inventoryMenu.broadcastFullState();
                 for (var holder : ((ChunkMapAccessor)(Object) player.serverLevel().getChunkSource().chunkMap).stillworld$chunks()) {
                     if (holder.getLatestChunk() instanceof LevelChunk chunk && player.getChunkTrackingView().contains(chunk.getPos().x, chunk.getPos().z))
                         player.connection.send(new ClientboundLevelChunkWithLightPacket(chunk, player.serverLevel().getLightEngine(), null, null));

@@ -11,9 +11,11 @@ import org.spongepowered.asm.mixin.injection.callback.*;
 @Mixin(ServerGamePacketListenerImpl.class)
 public abstract class PhaseInputMixin {
     @Shadow public ServerPlayer player;
-    @Inject(method = {"handlePlayerAction", "handleUseItem", "handleUseItemOn", "handleInteract", "handleSetCreativeModeSlot"}, at = @At("HEAD"), cancellable = true)
+    @Inject(method = {"handlePlayerAction", "handleUseItem", "handleUseItemOn", "handleInteract"}, at = @At("HEAD"), cancellable = true)
     private void stillworld$ordinaryActions(CallbackInfo ci) { if (player.getServer().isSameThread() && PhaseManager.get(player) != null) ci.cancel(); }
-    @Inject(method = "handleContainerClick", at = @At("HEAD"), cancellable = true)
+    // Creative pick-block edits the local inventory before sending its packet too.
+    // Rejecting either kind of edit must undo that client-side prediction.
+    @Inject(method = {"handleContainerClick", "handleSetCreativeModeSlot"}, at = @At("HEAD"), cancellable = true)
     private void stillworld$inventory(CallbackInfo ci) {
         if (player.getServer().isSameThread() && PhaseManager.get(player) != null) { player.containerMenu.broadcastFullState(); ci.cancel(); }
     }

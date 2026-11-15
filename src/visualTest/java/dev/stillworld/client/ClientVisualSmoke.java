@@ -57,9 +57,10 @@ import java.util.function.Consumer;
 /** Exclusive development source set; no world-writing test code is shipped in the main jar. */
 @Mod(value = Stillworld.ID, dist = Dist.CLIENT)
 public final class ClientVisualSmoke {
-    private enum Step { WORLD, SETUP, BASELINE, ENTER, FROZEN, ORB_VIEW, ORB_RETURN, BE_RELOAD, VISION_RESIZE, VISION_RELOAD, VISION_FABULOUS, ORB_RELOADED, ORB_DISTANCE, ORB_RESTORED, MARK, ATTACK, SLASH, SLASH_RESOLVED, MINE_AIM, MINING, PLACE_AIM, PLACING, DEAD, EXIT, RESTORED }
+    private enum Step { WORLD, SETUP, BASELINE, ENTER, FROZEN, ORB_VIEW, ORB_RETURN, BE_RELOAD, VISION_RESIZE, VISION_RELOAD, VISION_FABULOUS, ORB_RELOADED, ORB_DISTANCE, ORB_RESTORED, MARK, ATTACK, SLASH, SLASH_RESOLVED, MINE_AIM, MINING, PLACE_AIM, PLACING, DEAD, EXIT, RESTORED, REAL_PLACE_AIM, REAL_PLACE, REAL_PLACE_DONE, CREATIVE_PICK, CREATIVE_REJECT, CREATIVE_EXIT, CREATIVE_TAKE, CREATIVE_PLACE_AIM, CREATIVE_PLACE, CREATIVE_DONE }
     private static final Vec3 ENTRY = new Vec3(.5,100,.5), COW = new Vec3(.5,100,2.9);
     private static final BlockPos MINE = new BlockPos(1,100,2), SUPPORT = new BlockPos(-1,99,2), REAL_CHANGE = new BlockPos(3,100,2);
+    private static final BlockPos REAL_SUPPORT = new BlockPos(1,99,-2);
     private static final BlockPos CHEST=new BlockPos(-3,100,2), ENDER=new BlockPos(-4,100,3), SHULKER=new BlockPos(2,100,5), BOOK=new BlockPos(-3,100,5), BELL=new BlockPos(3,100,5);
     private final Map<BlockPos,BlockEntity> originalBlockEntities=new HashMap<>();
     private CompoundTag blockEntityPose;
@@ -356,7 +357,71 @@ public final class ClientVisualSmoke {
                 }
                 case RESTORED -> {if(!serverDone||age<25)return;require(mc.level.getGameTime()>frozenTime,"Live environment time did not resume");
                     require(lateRealityFrames>0,"Post-entry creature was never rendered in live reality/orb");
-                    checks.add("The same post-entry creature remains visible in live reality/orb");shot("06-reality-restored.png");finish(null);}
+                    checks.add("The same post-entry creature remains visible in live reality/orb");shot("06-reality-restored.png");
+                    mc.player.getInventory().selected=1;aim(Vec3.atCenterOf(REAL_SUPPORT).add(0,.5,0));advance(Step.REAL_PLACE_AIM);}
+                case REAL_PLACE_AIM -> {
+                    if(age<8)return;
+                    require(mc.hitResult instanceof net.minecraft.world.phys.BlockHitResult hit&&hit.getBlockPos().equals(REAL_SUPPORT),"Reality placement fixture missed its support block: "+mc.hitResult);
+                    click(mc.options.keyUse);advance(Step.REAL_PLACE);
+                }
+                case REAL_PLACE -> {
+                    if(age<25)return;
+                    var clientState=mc.level.getBlockState(REAL_SUPPORT.above());
+                    onServer(p->{
+                        var state=p.serverLevel().getBlockState(REAL_SUPPORT.above());
+                        require(state.is(Blocks.DIRT),"Post-exit server placement failed: block="+state+", client="+clientState+", phase="+PhaseManager.get(p)+", hand="+p.getMainHandItem()+", mayBuild="+p.mayBuild());
+                        require(clientState.is(Blocks.DIRT),"Post-exit block vanished on client while server retained it");
+                        require(p.getInventory().getItem(1).getCount()==62,"Normal post-exit placement must consume exactly one dirt");
+                    });advance(Step.REAL_PLACE_DONE);
+                }
+                case REAL_PLACE_DONE -> {
+                    if(!serverDone)return;
+                    checks.add("Normal survival right-click placement persists on server and client after exit");
+                    onServer(p->{
+                        p.setGameMode(GameType.CREATIVE);
+                        CuriosApi.getCuriosInventory(p).orElseThrow().getStacksHandler("stillworld").orElseThrow().getStacks()
+                                .setStackInSlot(0,new ItemStack(ModContent.CHARMS.get(Rank.INFINITY).get()));
+                        p.getInventory().setItem(1,ItemStack.EMPTY);p.inventoryMenu.broadcastFullState();
+                        p.serverLevel().removeBlock(REAL_SUPPORT.above(),false);
+                        require(PhaseManager.enter(p),"Creative reentry failed");
+                    });advance(Step.CREATIVE_PICK);
+                }
+                case CREATIVE_PICK -> {
+                    if(!serverDone||!StillworldClient.active()||age<20)return;
+                    require(mc.gameMode.getPlayerMode()==GameType.CREATIVE,"Creative mode did not reach the client");
+                    // This is the same optimistic local edit and packet used by the creative screen/pick-block.
+                    var stone=new ItemStack(Items.STONE,64);mc.player.getInventory().setItem(1,stone);
+                    mc.gameMode.handleCreativeModeItemAdd(stone,37);advance(Step.CREATIVE_REJECT);
+                }
+                case CREATIVE_REJECT -> {
+                    if(age<15)return;
+                    require(mc.player.getInventory().getItem(1).isEmpty(),"Rejected creative pick left a phantom item on the client");
+                    checks.add("Rejected in-phase creative inventory prediction immediately restores the actual empty slot");
+                    click("key.stillworld.toggle");advance(Step.CREATIVE_EXIT);
+                }
+                case CREATIVE_EXIT -> {
+                    if(StillworldClient.active()||age<15)return;
+                    require(mc.player.getInventory().getItem(1).isEmpty(),"Phantom creative item survived phase exit");
+                    var stone=new ItemStack(Items.STONE,64);mc.player.getInventory().setItem(1,stone);
+                    mc.gameMode.handleCreativeModeItemAdd(stone,37);advance(Step.CREATIVE_TAKE);
+                }
+                case CREATIVE_TAKE -> {
+                    if(age<15)return;
+                    onServer(p->require(p.getMainHandItem().is(Items.STONE),"Normal creative inventory selection failed after exit"));
+                    aim(Vec3.atCenterOf(REAL_SUPPORT).add(0,.5,0));advance(Step.CREATIVE_PLACE_AIM);
+                }
+                case CREATIVE_PLACE_AIM -> {
+                    if(!serverDone||age<8)return;
+                    require(mc.hitResult instanceof net.minecraft.world.phys.BlockHitResult hit&&hit.getBlockPos().equals(REAL_SUPPORT),"Creative placement fixture missed its support block: "+mc.hitResult);
+                    click(mc.options.keyUse);advance(Step.CREATIVE_PLACE);
+                }
+                case CREATIVE_PLACE -> {
+                    if(age<25)return;
+                    require(mc.level.getBlockState(REAL_SUPPORT.above()).is(Blocks.STONE),"Post-exit creative placement disappeared from the client");
+                    onServer(p->{require(p.serverLevel().getBlockState(REAL_SUPPORT.above()).is(Blocks.STONE),"Post-exit creative placement did not persist on the server");
+                        require(p.getMainHandItem().getCount()==64,"Creative placement consumed the selected stack");});advance(Step.CREATIVE_DONE);
+                }
+                case CREATIVE_DONE -> {if(!serverDone)return;checks.add("Creative pick and placement after exit agree on client and server and persist");finish(null);}
                 default -> { }
             }
         } catch(Throwable failure){finish(failure);}
