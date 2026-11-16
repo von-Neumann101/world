@@ -14,6 +14,12 @@ public final class RiftShaderProbe {
     private static final int WIDTH=512,HEIGHT=384;
     private static int checks;
     public static void main(String[] args)throws Exception {
+        var id=java.util.UUID.randomUUID();
+        var older=new StillworldRendering.Slash(id,net.minecraft.world.phys.Vec3.ZERO,0,0,1_000_000_000L);
+        var newer=new StillworldRendering.Slash(java.util.UUID.randomUUID(),net.minecraft.world.phys.Vec3.ZERO,0,0,1_100_000_000L);
+        check(older.reveal(1_000_000_000L)==0,"new cut starts unrevealed");
+        check(older.reveal(1_100_000_000L)==.5f&&newer.reveal(1_100_000_000L)==0,"cuts have independent clocks");
+        check(older.reveal(1_200_000_000L)==1&&older.reveal(2_500_000_000L)==1,"reveal finishes at 200ms and stays complete");
         try(var errors=GLFWErrorCallback.createPrint(System.err)) {
             errors.set();check(glfwInit(),"GLFW init");
             glfwDefaultWindowHints();glfwWindowHint(GLFW_VISIBLE,GLFW_FALSE);
@@ -28,10 +34,11 @@ public final class RiftShaderProbe {
                 check(glfwGetWindowAttrib(window,GLFW_VISIBLE)==GLFW_FALSE,"hidden window");
                 int vertex=compile(GL_VERTEX_SHADER,"""
                     #version 150
+                    uniform float Reveal;
                     out vec2 texCoord0;
                     out vec4 vertexColor;
                     void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);texCoord0=p;
-                    vertexColor=vec4(1);gl_Position=vec4(p*2-1,0,1);}
+                    vertexColor=vec4(1,1,1,Reveal);gl_Position=vec4(p*2-1,0,1);}
                     """);
                 int fragment=compile(GL_FRAGMENT_SHADER,Files.readString(Path.of(args[0]))),program=glCreateProgram();
                 glAttachShader(program,vertex);glAttachShader(program,fragment);glLinkProgram(program);
@@ -41,6 +48,7 @@ public final class RiftShaderProbe {
                 glUniform1i(glGetUniformLocation(program,"Sampler1"),1);
                 glUniform2f(glGetUniformLocation(program,"ViewportSize"),WIDTH,HEIGHT);
                 glUniform4f(glGetUniformLocation(program,"ColorModulator"),1,1,1,1);
+                int reveal=glGetUniformLocation(program,"Reveal");glUniform1f(reveal,1);
                 int mask=texture(0),scene=texture(1);
                 upload(0,mask,1,1,new float[]{1,1,1,1});
                 upload(1,scene,1,1,new float[]{.1f,.7f,.2f,1});
@@ -54,6 +62,22 @@ public final class RiftShaderProbe {
                 check(left>0&&right>0&&left<middle*.2&&right<middle*.2,"both ends taper to fine tips");
                 check(columnSize(pixels,0)<4&&columnSize(pixels,511)<4,"tips close at the ends");
                 write(Path.of(args[1],"rift-mask.png"),pixels);
+                glUniform1f(reveal,0);pixels=draw();
+                check(visiblePixels(pixels)==0,"birth frame has no complete slash");
+                glEnable(GL_DEPTH_TEST);glDepthFunc(GL_LEQUAL);glClearDepth(1);glClear(GL_DEPTH_BUFFER_BIT);draw();
+                float[] depth=new float[1];glReadPixels(256,192,1,1,GL_DEPTH_COMPONENT,GL_FLOAT,depth);
+                check(depth[0]==1,"unrevealed opening writes no depth");glDisable(GL_DEPTH_TEST);
+                glUniform1f(reveal,.25f);pixels=draw();
+                check(columnSize(pixels,450)>0&&columnSize(pixels,256)==0&&columnSize(pixels,64)==0,"upper tip appears before middle and lower tip");
+                near(pixels,450,286,.1f,.7f,.2f,"revealed reality is fully colored, not globally faded");
+                write(Path.of(args[1],"rift-reveal-25.png"),pixels);int quarter=visiblePixels(pixels);
+                glUniform1f(reveal,.6f);pixels=draw();
+                check(columnSize(pixels,450)>0&&columnSize(pixels,256)>0&&columnSize(pixels,64)==0,"reveal travels down the cut, keeping the upper segment");
+                check(visiblePixels(pixels)>quarter,"visible length grows during reveal");
+                near(pixels,256,192,.1f,.7f,.2f,"revealed middle keeps live-world color");
+                write(Path.of(args[1],"rift-reveal-60.png"),pixels);
+                glUniform1f(reveal,1);pixels=draw();
+                check(columnSize(pixels,64)>0&&columnSize(pixels,256)==middle,"completed reveal retains full length and narrow width");
                 upload(1,scene,1,1,new float[]{.8f,.1f,.3f,1});
                 near(draw(),256,192,.8f,.1f,.3f,"new live frame is visible without changing the rift");
                 upload(1,scene,2,1,new float[]{1,0,0,1,0,0,1,1});
@@ -75,6 +99,7 @@ public final class RiftShaderProbe {
     private static void upload(int slot,int texture,int w,int h,float[] data){glActiveTexture(GL_TEXTURE0+slot);glBindTexture(GL_TEXTURE_2D,texture);glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32F,w,h,0,GL_RGBA,GL_FLOAT,data);}
     private static float[] draw(){glClearColor(.2f,.2f,.2f,1);glClear(GL_COLOR_BUFFER_BIT);glDrawArrays(GL_TRIANGLES,0,3);float[] p=new float[WIDTH*HEIGHT*4];glReadPixels(0,0,WIDTH,HEIGHT,GL_RGBA,GL_FLOAT,p);return p;}
     private static int columnSize(float[] p,int x){int n=0;for(int y=0;y<HEIGHT;y++){int i=(y*WIDTH+x)*4;if(Math.abs(p[i]-.2)+Math.abs(p[i+1]-.2)+Math.abs(p[i+2]-.2)>.07)n++;}return n;}
+    private static int visiblePixels(float[] p){int n=0;for(int x=0;x<WIDTH;x++)n+=columnSize(p,x);return n;}
     private static int coloredInColumn(float[] p,int x,int channel){int n=0;for(int y=0;y<HEIGHT;y++){int i=(y*WIDTH+x)*4;if(p[i+channel]>.9&&p[i+(channel+1)%3]<.1)n++;}return n;}
     private static void near(float[] p,int x,int y,float r,float g,float b,String label){int i=(y*WIDTH+x)*4;check(Math.abs(p[i]-r)<.015&&Math.abs(p[i+1]-g)<.015&&Math.abs(p[i+2]-b)<.015,label);}
     private static void write(Path path,float[] p)throws Exception{Files.createDirectories(path.getParent());var image=new BufferedImage(WIDTH,HEIGHT,BufferedImage.TYPE_INT_RGB);for(int y=0;y<HEIGHT;y++)for(int x=0;x<WIDTH;x++){int i=(y*WIDTH+x)*4;image.setRGB(x,HEIGHT-1-y,(Math.round(p[i]*255)<<16)|(Math.round(p[i+1]*255)<<8)|Math.round(p[i+2]*255));}ImageIO.write(image,"png",path.toFile());}

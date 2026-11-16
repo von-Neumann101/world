@@ -35,7 +35,12 @@ public final class StillworldRendering {
     private static Matrix4f worldProjection, worldView;
     private static Vec3 worldCamera;
     private static float worldPartial;
-    public record Slash(java.util.UUID id,Vec3 center, float yaw, float pitch) { }
+    public record Slash(java.util.UUID id,Vec3 center,float yaw,float pitch,long bornNanos) {
+        public Slash(java.util.UUID id,Vec3 center,float yaw,float pitch) {
+            this(id,center,yaw,pitch,System.nanoTime());
+        }
+        float reveal(long now) {return Mth.clamp((now-bornNanos)/200_000_000f,0,1);}
+    }
     public static boolean visualPass() { return renderingVisual; }
     static boolean bladeSilhouette() { return bladeSilhouette; }
     static int bladeTint() { return bladeTint; }

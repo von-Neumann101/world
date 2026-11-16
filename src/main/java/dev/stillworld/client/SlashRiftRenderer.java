@@ -27,6 +27,7 @@ final class SlashRiftRenderer {
         RenderSystem.setProjectionMatrix(event.getProjectionMatrix(),VertexSorting.DISTANCE_TO_ORIGIN);
         var buffers=Minecraft.getInstance().renderBuffers().bufferSource();
         var camera=event.getCamera().getPosition();var pose=new PoseStack();
+        long now=System.nanoTime();
         try {
             for(var slash:StillworldClient.slashes()) {
                 if(!visible(slash,event))continue;
@@ -35,10 +36,12 @@ final class SlashRiftRenderer {
                 pose.mulPose(Axis.YP.rotationDegrees(-slash.yaw()));
                 pose.mulPose(Axis.XP.rotationDegrees(slash.pitch()));
                 var out=buffers.getBuffer(SlashRiftRenderType.RIFT);
+                // Carry each cut's reveal in vertex alpha so different ages share one batch.
+                int reveal=Math.round(slash.reveal(now)*255);
                 // A single double-sided surface avoids blending two copies of the live scene.
                 for(int i=0;i<4;i++) {
                     float u=i==1||i==2?1:0,v=i>=2?1:0;
-                    out.addVertex(pose.last(),u*4-2,v*3-1.5f,0).setColor(-1).setUv(u,v)
+                    out.addVertex(pose.last(),u*4-2,v*3-1.5f,0).setColor(255,255,255,reveal).setUv(u,v)
                             .setOverlay(0).setLight(0).setNormal(pose.last(),0,0,1);
                 }
                 pose.popPose();

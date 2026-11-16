@@ -23,6 +23,11 @@ void main() {
     float edge = min(upper - across, across - lower);
     float aa = max(fwidth(edge) * 0.65, 0.00001);
     float coverage = smoothstep(-aa, aa, edge);
+    // Vertex alpha carries per-cut reveal, not opacity. The high/right tip is u=1.
+    float along = 1.0 - texCoord0.x;
+    float frontAA = max(fwidth(along), 0.00001);
+    float front = mix(-frontAA, 1.0 + frontAA, vertexColor.a);
+    coverage *= 1.0 - smoothstep(front - frontAA, front + frontAA, along);
     if(coverage < 0.01) discard;
 
     vec2 halfPixel = 0.5 / vec2(textureSize(Sampler1, 0));
@@ -33,5 +38,5 @@ void main() {
     float silver = 1.0 - smoothstep(0.006 * WIDTH_SCALE * taper - aa, 0.006 * WIDTH_SCALE * taper + aa, edge);
     vec3 color = mix(vec3(0.015, 0.019, 0.024), live, opening);
     color = mix(color, vec3(0.84, 0.88, 0.94), silver * 0.9);
-    fragColor = vec4(color, coverage) * vertexColor * ColorModulator;
+    fragColor = vec4(color * vertexColor.rgb, coverage) * ColorModulator;
 }
